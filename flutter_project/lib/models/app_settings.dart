@@ -72,13 +72,16 @@ class AppSettings {
       ratesMap = raw.map((k, v) =>
           MapEntry(int.tryParse(k.toString()) ?? 0, (v as num).toDouble()));
     }
+    final rawPointsPerCurrency = (m['points_per_currency'] as int? ?? 1);
+    final sanitizedPointsPerCurrency = rawPointsPerCurrency <= 0 ? 1 : rawPointsPerCurrency;
+
     return AppSettings(
       monthlyInstallmentRate:
           (m['monthly_installment_rate'] as num? ?? 3.0).toDouble(),
       installmentRatesByMonths: ratesMap,
       defaultAdminFeeRate:
           (m['default_admin_fee_rate'] as num? ?? 5.0).toDouble(),
-      pointsPerCurrency: (m['points_per_currency'] as int? ?? 1),
+      pointsPerCurrency: sanitizedPointsPerCurrency,
       pointsRedemptionRate:
           (m['points_redemption_rate'] as num? ?? 0.01).toDouble(),
       maxInstallmentMonths: (m['max_installment_months'] as int? ?? 24),

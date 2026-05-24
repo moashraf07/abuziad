@@ -36,8 +36,10 @@ class _CustomerPointsScreenState extends State<CustomerPointsScreen> {
   }
 
   void _onProviderChanged() {
-    // Reload points log and fresh customer balance whenever the provider notifies
-    if (mounted && !_loading) _load();
+    // Reload points log and fresh customer balance whenever the provider notifies.
+    // We intentionally reload even during an active fetch so updates are not lost
+    // if the provider notifies while this screen is loading.
+    if (mounted) _load();
   }
 
   @override

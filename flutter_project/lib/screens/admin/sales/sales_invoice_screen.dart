@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:printing/printing.dart';
 import '../../../providers/sales_provider.dart';
 import '../../../providers/inventory_provider.dart';
@@ -116,8 +115,12 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
     } catch (_) {}
   }
 
-  int _calcPoints(double total) =>
-      (total * _appSettings.pointsPerCurrency).floor();
+  int _calcPoints(double total) {
+    if (total <= 0) return 0;
+    if (_appSettings.pointsPerCurrency <= 0) return 0;
+    final points = (total * _appSettings.pointsPerCurrency).floor();
+    return points == 0 ? 1 : points;
+  }
 
   static String _storeTypeLabel(String storeType) {
     switch (storeType) {
@@ -436,52 +439,31 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
       // ── Log points for all selected customers and technicians ─────────────
       String? _pointsErrorMsg;
       int _totalPointsLogged = 0;
-      final _db = Supabase.instance.client;
       final _today = DateTime.now().toIso8601String().substring(0, 10);
       final _invoiceLabel = 'INV-$id';
-      final _now = DateTime.now().toIso8601String();
       final _allRecipients = [
         ..._selectedCustomers,
         ..._selectedTechnicians,
       ];
+      final pts = _calcPoints(sales.total);
+
+      if (_allRecipients.isNotEmpty && _appSettings.pointsPerCurrency <= 0) {
+        _pointsErrorMsg =
+            'قيمة نقاط الولاء غير صالحة. اضبط points_per_currency في إعدادات التطبيق.';
+      }
+
       for (final recipient in _allRecipients) {
-        if (recipient.id == null) continue;
-        final pts = _calcPoints(sales.total);
-        if (pts <= 0) continue;
+        if (recipient.id == null || pts <= 0) continue;
         try {
-          // 1. Insert log entry
-          await _db.from('customer_points_log').insert({
-            'customer_id':    recipient.id,
-            'invoice_id':     id,
-            'invoice_no':     _invoiceLabel,
-            'date':           _today,
-            'points_earned':  pts,
-            'point_value':    _appSettings.pointValueInUnit,
-            'point_currency': _appSettings.pointCurrencyType,
-            'is_settled':     false,
-            'created_at':     _now,
-          });
-
-          // 2. Update customer points — try RPC first, fallback to manual
-          try {
-            await _db.rpc('increment_customer_points', params: {
-              'p_customer_id': recipient.id,
-              'p_delta': pts,
-            });
-          } catch (_) {
-            // RPC not installed — manual read-modify-write
-            final row = await _db
-                .from('customers')
-                .select('points')
-                .eq('id', recipient.id!)
-                .single();
-            final current = (row['points'] as num? ?? 0).toInt();
-            await _db
-                .from('customers')
-                .update({'points': current + pts})
-                .eq('id', recipient.id!);
-          }
-
+          await context.read<CustomerProvider>().logPointsForInvoice(
+                customerId: recipient.id!,
+                invoiceId: id,
+                invoiceNo: _invoiceLabel,
+                date: _today,
+                pointsEarned: pts,
+                pointValue: _appSettings.pointValueInUnit,
+                pointCurrency: _appSettings.pointCurrencyType,
+              );
           _totalPointsLogged += pts;
         } catch (e) {
           _pointsErrorMsg = (_pointsErrorMsg == null ? '' : '$_pointsErrorMsg\n') +
@@ -490,7 +472,7 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
       }
 
       // Refresh provider so badges update — await so the new data is ready
-      if (_totalPointsLogged > 0 && mounted) {
+      if (mounted) {
         await context.read<CustomerProvider>().loadAll();
       }
 

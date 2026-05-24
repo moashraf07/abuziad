@@ -10,25 +10,31 @@ class CustomerInvoice {
     final String date;
     final String createdAt;
     final List<CustomerInvoiceItem> items;
-    // Joined from customers table
-    final String? customerName;
-    final String? customerPhone;
+  final double? discount;
+  final double? amountPaid;
+  final double? remaining;
+  // Joined from customers table
+  final String? customerName;
+  final String? customerPhone;
 
-    CustomerInvoice({
-      this.id,
-      required this.customerId,
-      required this.invoiceNo,
-      this.total = 0,
-      this.paymentMethod = 'in_store',
-      this.receiptPath,
-      this.status = 'pending',
-      this.notes,
-      required this.date,
-      required this.createdAt,
-      this.items = const [],
-      this.customerName,
-      this.customerPhone,
-    });
+  CustomerInvoice({
+    this.id,
+    required this.customerId,
+    required this.invoiceNo,
+    this.total = 0,
+    this.paymentMethod = 'in_store',
+    this.receiptPath,
+    this.status = 'pending',
+    this.notes,
+    required this.date,
+    required this.createdAt,
+    this.items = const [],
+    this.discount,
+    this.amountPaid,
+    this.remaining,
+    this.customerName,
+    this.customerPhone,
+  });
 
     String get statusLabel {
       switch (status) {
@@ -59,6 +65,9 @@ class CustomerInvoice {
       'notes': notes,
       'date': date,
       'created_at': createdAt,
+      'discount': discount,
+      'amount_paid': amountPaid,
+      'remaining': remaining,
     };
 
     factory CustomerInvoice.fromMap(Map<String, dynamic> m) => CustomerInvoice(
@@ -72,16 +81,35 @@ class CustomerInvoice {
       notes: m['notes'] as String?,
       date: m['date'] as String,
       createdAt: m['created_at'] as String,
+      discount: (m['discount'] as num?)?.toDouble(),
+      amountPaid: (m['amount_paid'] as num?)?.toDouble(),
+      remaining: (m['remaining'] as num?)?.toDouble(),
       customerName: m['customer_name'] as String?,
       customerPhone: m['customer_phone'] as String?,
     );
 
-    CustomerInvoice copyWith({String? status}) => CustomerInvoice(
-      id: id, customerId: customerId, invoiceNo: invoiceNo, total: total,
-      paymentMethod: paymentMethod, receiptPath: receiptPath,
-      status: status ?? this.status, notes: notes, date: date,
-      createdAt: createdAt, items: items,
-      customerName: customerName, customerPhone: customerPhone,
+    CustomerInvoice copyWith({
+      String? status,
+      double? discount,
+      double? amountPaid,
+      double? remaining,
+    }) => CustomerInvoice(
+      id: id,
+      customerId: customerId,
+      invoiceNo: invoiceNo,
+      total: total,
+      paymentMethod: paymentMethod,
+      receiptPath: receiptPath,
+      status: status ?? this.status,
+      notes: notes,
+      date: date,
+      createdAt: createdAt,
+      items: items,
+      discount: discount ?? this.discount,
+      amountPaid: amountPaid ?? this.amountPaid,
+      remaining: remaining ?? this.remaining,
+      customerName: customerName,
+      customerPhone: customerPhone,
     );
   }
 
