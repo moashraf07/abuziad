@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../../database/daos/customer_invoice_dao.dart';
 import '../../../database/daos/request_dao.dart';
 import '../../../utils/constants.dart';
 import '../../../utils/formatters.dart';
 import '../../../utils/notification_messages.dart';
 import '../../../services/push_notification_service.dart';
+import '../customer_invoices/customer_invoices_admin_screen.dart';
 
 class RequestsScreen extends StatefulWidget {
   final String? storeType;
@@ -67,8 +69,12 @@ class _RequestsScreenState extends State<RequestsScreen>
           indicatorColor: Colors.white,
           indicatorWeight: 3,
           tabs: const [
-            Tab(icon: Icon(Icons.hourglass_top, size: 16), text: 'قيد الانتظار'),
-            Tab(icon: Icon(Icons.check_circle_outline, size: 16), text: 'مقبولة'),
+            Tab(
+                icon: Icon(Icons.hourglass_top, size: 16),
+                text: 'قيد الانتظار'),
+            Tab(
+                icon: Icon(Icons.check_circle_outline, size: 16),
+                text: 'مقبولة'),
             Tab(icon: Icon(Icons.cancel_outlined, size: 16), text: 'مرفوضة'),
           ],
         ),
@@ -122,6 +128,7 @@ class _RequestsList extends StatefulWidget {
 class _RequestsListState extends State<_RequestsList> {
   List<Map<String, dynamic>> _requests = [];
   bool _loading = true;
+  final _invoiceDao = CustomerInvoiceDao();
 
   @override
   void initState() {
@@ -133,9 +140,37 @@ class _RequestsListState extends State<_RequestsList> {
     if (!mounted) return;
     setState(() => _loading = true);
     try {
-      final r = await widget.dao.getAllWithCustomer(
+      final requestList = await widget.dao.getAllWithCustomer(
           status: widget.status, storeType: widget.storeType);
-      if (mounted) setState(() { _requests = r; _loading = false; });
+      final invoiceList =
+          await _invoiceDao.getAllForRequests(storeType: widget.storeType);
+
+      final filteredInvoices = invoiceList.where((row) {
+        final status = row['status'] as String? ?? '';
+        if (widget.status == AppConstants.requestStatusApproved) {
+          return status == AppConstants.requestStatusApproved;
+        }
+        return status == widget.status;
+      }).toList();
+
+      final merged = <Map<String, dynamic>>[
+        ...requestList.map((row) => {...row, 'source': 'request'}),
+        ...filteredInvoices.map((row) => {...row, 'source': 'invoice'}),
+      ];
+
+      merged.sort((a, b) {
+        final left = (a['created_at'] as String? ?? a['date'] as String? ?? '');
+        final right =
+            (b['created_at'] as String? ?? b['date'] as String? ?? '');
+        return right.compareTo(left);
+      });
+
+      if (mounted) {
+        setState(() {
+          _requests = merged;
+          _loading = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -154,6 +189,8 @@ class _RequestsListState extends State<_RequestsList> {
         iconColor: Colors.green,
         productName: r['product_name'] as String,
         customerName: r['customer_name'] as String? ?? '-',
+        confirmLabel: 'قبول الطلب',
+        confirmColor: Colors.green,
         child: Padding(
           padding: const EdgeInsets.only(top: 8),
           child: TextField(
@@ -162,13 +199,12 @@ class _RequestsListState extends State<_RequestsList> {
             decoration: InputDecoration(
               labelText: 'خصم الأدمن (اختياري %)',
               prefixIcon: const Icon(Icons.discount_outlined),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               hintText: '0',
             ),
           ),
         ),
-        confirmLabel: 'قبول الطلب',
-        confirmColor: Colors.green,
       ),
     );
     if (confirmed != true || !mounted) return;
@@ -203,6 +239,8 @@ class _RequestsListState extends State<_RequestsList> {
         iconColor: Colors.red,
         productName: r['product_name'] as String,
         customerName: r['customer_name'] as String? ?? '-',
+        confirmLabel: 'رفض الطلب',
+        confirmColor: Colors.red,
         child: Padding(
           padding: const EdgeInsets.only(top: 8),
           child: TextField(
@@ -211,13 +249,12 @@ class _RequestsListState extends State<_RequestsList> {
             decoration: InputDecoration(
               labelText: 'سبب الرفض (اختياري)',
               prefixIcon: const Icon(Icons.comment_outlined),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               hintText: 'اكتب سبب الرفض ليصله العميل…',
             ),
           ),
         ),
-        confirmLabel: 'رفض الطلب',
-        confirmColor: Colors.red,
       ),
     );
     if (confirmed != true || !mounted) return;
@@ -245,7 +282,9 @@ class _RequestsListState extends State<_RequestsList> {
     if (customerId == null) return;
     PushNotificationService.sendToCustomer(
       customerId: customerId,
-      title: approved ? NotifMsg.requestApprovedTitle : NotifMsg.requestRejectedTitle,
+      title: approved
+          ? NotifMsg.requestApprovedTitle
+          : NotifMsg.requestRejectedTitle,
       body: approved
           ? NotifMsg.requestApprovedBody
           : (reason != null && reason.isNotEmpty
@@ -275,6 +314,22 @@ class _RequestsListState extends State<_RequestsList> {
         itemCount: _requests.length,
         itemBuilder: (ctx, i) {
           final r = _requests[i];
+          final source = r['source'] as String? ?? 'request';
+          if (source == 'invoice') {
+            return _InvoiceRequestCard(
+              data: r,
+              themeColor: widget.themeColor,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CustomerInvoicesAdminScreen(),
+                  ),
+                );
+              },
+            );
+          }
+
           return _RequestCard(
             data: r,
             themeColor: widget.themeColor,
@@ -297,8 +352,14 @@ class _RequestsListState extends State<_RequestsList> {
         data: r,
         themeColor: widget.themeColor,
         isPending: widget.status == AppConstants.requestStatusPending,
-        onAccept: () { Navigator.pop(context); _accept(r); },
-        onReject: () { Navigator.pop(context); _reject(r); },
+        onAccept: () {
+          Navigator.pop(context);
+          _accept(r);
+        },
+        onReject: () {
+          Navigator.pop(context);
+          _reject(r);
+        },
       ),
     );
   }
@@ -325,16 +386,23 @@ class _RequestCard extends StatelessWidget {
 
   String get _paymentLabel {
     switch (data['payment_method']) {
-      case 'in_store': return 'داخل المحل';
-      case 'receipt': return 'إيصال';
-      default: return data['payment_method'] as String? ?? '-';
+      case 'in_store':
+        return 'داخل المحل';
+      case 'receipt':
+        return 'إيصال';
+      default:
+        return data['payment_method'] as String? ?? '-';
     }
   }
 
   String get _dateLabel {
     final raw = (data['date'] as String?) ?? (data['created_at'] as String?);
     if (raw == null) return '-';
-    try { return AppFormatters.formatDateFromString(raw); } catch (_) { return raw.substring(0, 10); }
+    try {
+      return AppFormatters.formatDateFromString(raw);
+    } catch (_) {
+      return raw.substring(0, 10);
+    }
   }
 
   @override
@@ -359,7 +427,8 @@ class _RequestCard extends StatelessWidget {
               color: themeColor,
               child: Row(
                 children: [
-                  const Icon(Icons.inventory_2_outlined, color: Colors.white, size: 18),
+                  const Icon(Icons.inventory_2_outlined,
+                      color: Colors.white, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -501,6 +570,140 @@ class _RequestCard extends StatelessWidget {
   }
 }
 
+class _InvoiceRequestCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  final Color themeColor;
+  final VoidCallback onTap;
+
+  const _InvoiceRequestCard({
+    required this.data,
+    required this.themeColor,
+    required this.onTap,
+  });
+
+  String get _paymentLabel {
+    switch (data['payment_method']) {
+      case 'in_store':
+        return 'دفع عند الاستلام';
+      case 'vodafone_cash':
+        return 'فودافون كاش';
+      case 'instapay':
+        return 'إنستاباي';
+      case 'bank_transfer':
+        return 'تحويل بنكي';
+      default:
+        return data['payment_method'] as String? ?? '-';
+    }
+  }
+
+  String get _dateLabel {
+    final raw = (data['date'] as String?) ?? (data['created_at'] as String?);
+    if (raw == null) return '-';
+    try {
+      return AppFormatters.formatDateFromString(raw);
+    } catch (_) {
+      return raw.substring(0, 10);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = (data['total'] as num?)?.toDouble() ?? 0;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              color: themeColor,
+              child: Row(
+                children: [
+                  const Icon(Icons.receipt_long, color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      data['product_name'] as String? ?? 'فاتورة',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.arrow_forward_ios,
+                      color: Colors.white.withValues(alpha: 0.9), size: 15),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _InfoRow(
+                    icon: Icons.person_outline,
+                    label: 'العميل',
+                    value: data['customer_name'] as String? ?? '-',
+                  ),
+                  if ((data['customer_phone'] as String?) != null)
+                    _InfoRow(
+                      icon: Icons.phone_outlined,
+                      label: 'الهاتف',
+                      value: data['customer_phone'] as String,
+                    ),
+                  _InfoRow(
+                    icon: Icons.payment,
+                    label: 'طريقة الدفع',
+                    value: _paymentLabel,
+                  ),
+                  _InfoRow(
+                    icon: Icons.attach_money,
+                    label: 'الإجمالي',
+                    value: AppFormatters.formatCurrency(total),
+                  ),
+                  _InfoRow(
+                    icon: Icons.calendar_today_outlined,
+                    label: 'التاريخ',
+                    value: _dateLabel,
+                  ),
+                  if ((data['notes'] as String?) != null &&
+                      (data['notes'] as String).isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.notes_outlined,
+                              size: 14, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              data['notes'] as String,
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.grey),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Detail bottom sheet ──────────────────────────────────────────────────────
 
 class _DetailSheet extends StatelessWidget {
@@ -520,9 +723,12 @@ class _DetailSheet extends StatelessWidget {
 
   String get _paymentLabel {
     switch (data['payment_method']) {
-      case 'in_store': return 'داخل المحل';
-      case 'receipt': return 'رفع إيصال';
-      default: return data['payment_method'] as String? ?? '-';
+      case 'in_store':
+        return 'داخل المحل';
+      case 'receipt':
+        return 'رفع إيصال';
+      default:
+        return data['payment_method'] as String? ?? '-';
     }
   }
 
@@ -547,7 +753,8 @@ class _DetailSheet extends StatelessWidget {
             // Handle
             Container(
               margin: const EdgeInsets.only(top: 10, bottom: 4),
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
                 color: Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(4),
@@ -567,13 +774,13 @@ class _DetailSheet extends StatelessWidget {
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                    Text(data['product_name'] as String? ?? '-',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 17)),
-                    Text('تفاصيل الطلب',
-                        style: TextStyle(
-                            color: Colors.grey.shade500, fontSize: 12)),
-                  ]),
+                        Text(data['product_name'] as String? ?? '-',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 17)),
+                        Text('تفاصيل الطلب',
+                            style: TextStyle(
+                                color: Colors.grey.shade500, fontSize: 12)),
+                      ]),
                 ),
                 _StatusBadge(data['status'] as String? ?? 'pending'),
               ]),
@@ -586,47 +793,58 @@ class _DetailSheet extends StatelessWidget {
                 padding: const EdgeInsets.all(20),
                 children: [
                   _DetailGroup(title: 'بيانات العميل', items: [
-                    _DetailItem(icon: Icons.person,
+                    _DetailItem(
+                        icon: Icons.person,
                         label: 'الاسم',
                         value: data['customer_name'] as String? ?? '-'),
                     if ((data['customer_phone'] as String?) != null)
-                      _DetailItem(icon: Icons.phone,
+                      _DetailItem(
+                          icon: Icons.phone,
                           label: 'الهاتف',
                           value: data['customer_phone'] as String),
                   ]),
                   const SizedBox(height: 16),
                   _DetailGroup(title: 'تفاصيل الطلب', items: [
-                    _DetailItem(icon: Icons.payment,
+                    _DetailItem(
+                        icon: Icons.payment,
                         label: 'طريقة الدفع',
                         value: _paymentLabel),
                     if (installments != null)
-                      _DetailItem(icon: Icons.calendar_month,
+                      _DetailItem(
+                          icon: Icons.calendar_month,
                           label: 'عدد الأقساط',
                           value: '$installments شهر'),
                     if (deposit > 0)
-                      _DetailItem(icon: Icons.account_balance_wallet,
+                      _DetailItem(
+                          icon: Icons.account_balance_wallet,
                           label: 'مبلغ العربون',
                           value: AppFormatters.formatCurrency(deposit)),
                     if (discount > 0)
-                      _DetailItem(icon: Icons.discount,
+                      _DetailItem(
+                          icon: Icons.discount,
                           label: 'خصم الأدمن',
                           value: '$discount %',
                           valueColor: Colors.green),
-                    _DetailItem(icon: Icons.calendar_today,
+                    _DetailItem(
+                        icon: Icons.calendar_today,
                         label: 'تاريخ الطلب',
                         value: () {
                           final raw = (data['date'] as String?) ??
                               (data['created_at'] as String?);
                           if (raw == null) return '-';
-                          try { return AppFormatters.formatDateFromString(raw); }
-                          catch (_) { return raw.substring(0, 10); }
+                          try {
+                            return AppFormatters.formatDateFromString(raw);
+                          } catch (_) {
+                            return raw.substring(0, 10);
+                          }
                         }()),
                   ]),
                   if ((data['notes'] as String?) != null &&
                       (data['notes'] as String).isNotEmpty) ...[
                     const SizedBox(height: 16),
                     _DetailGroup(title: 'ملاحظات', items: [
-                      _DetailItem(icon: Icons.notes,
+                      _DetailItem(
+                          icon: Icons.notes,
                           label: '',
                           value: data['notes'] as String),
                     ]),
@@ -774,8 +992,8 @@ class _ActionSheetState extends State<_ActionSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         decoration: const BoxDecoration(
           color: Colors.white,
@@ -789,7 +1007,8 @@ class _ActionSheetState extends State<_ActionSheet> {
             // Handle
             Center(
               child: Container(
-                width: 40, height: 4,
+                width: 40,
+                height: 4,
                 margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade300,
@@ -809,7 +1028,8 @@ class _ActionSheetState extends State<_ActionSheet> {
                     style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 17)),
                 Text(widget.productName,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                    style:
+                        TextStyle(color: Colors.grey.shade600, fontSize: 13)),
               ]),
             ]),
             const SizedBox(height: 16),
@@ -912,7 +1132,8 @@ class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  const _InfoRow({required this.icon, required this.label, required this.value});
+  const _InfoRow(
+      {required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -970,8 +1191,7 @@ class _DetailGroup extends StatelessWidget {
                         if (e.value.label.isNotEmpty) ...[
                           Text('${e.value.label}: ',
                               style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey.shade600)),
+                                  fontSize: 13, color: Colors.grey.shade600)),
                         ],
                         Expanded(
                           child: Text(
@@ -1016,13 +1236,19 @@ class _StatusBadge extends StatelessWidget {
     IconData icon;
     switch (status) {
       case AppConstants.requestStatusApproved:
-        color = Colors.green; label = 'مقبول'; icon = Icons.check_circle;
+        color = Colors.green;
+        label = 'مقبول';
+        icon = Icons.check_circle;
         break;
       case AppConstants.requestStatusRejected:
-        color = Colors.red; label = 'مرفوض'; icon = Icons.cancel;
+        color = Colors.red;
+        label = 'مرفوض';
+        icon = Icons.cancel;
         break;
       default:
-        color = Colors.orange; label = 'انتظار'; icon = Icons.hourglass_top;
+        color = Colors.orange;
+        label = 'انتظار';
+        icon = Icons.hourglass_top;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

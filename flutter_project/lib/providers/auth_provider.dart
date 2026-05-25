@@ -26,7 +26,9 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _state != AuthState.unauthenticated;
   bool get isInitialized => _initialized;
   bool get isAdmin => _state == AuthState.admin && !_viewingAsCustomer;
-  bool get isManager => (_state == AuthState.admin || _state == AuthState.manager) && !_viewingAsCustomer;
+  bool get isManager =>
+      (_state == AuthState.admin || _state == AuthState.manager) &&
+      !_viewingAsCustomer;
   bool get isPartner => _state == AuthState.partner && !_viewingAsCustomer;
   bool get isEmployee => _state == AuthState.employee && !_viewingAsCustomer;
   bool get isCustomer => _state == AuthState.customer || _viewingAsCustomer;
@@ -80,7 +82,9 @@ class AuthProvider extends ChangeNotifier {
     _lastRoute = prefs.getString('last_route');
 
     if (sessionType == null || sessionId == null) {
-      _initialized = true; notifyListeners(); return;
+      _initialized = true;
+      notifyListeners();
+      return;
     }
     if (sessionType == 'user') {
       final dao = UserDao();
@@ -115,10 +119,19 @@ class AuthProvider extends ChangeNotifier {
     try {
       final dao = UserDao();
       final user = await dao.findByUsername(username);
-      if (user == null) return 'اسم المستخدم غير موجود';
-      if (!user.isActive) return 'الحساب موقوف، تواصل مع المدير';
-      if (!HashHelper.verifyPassword(password, user.passwordHash)) return 'كلمة المرور غير صحيحة';
+      if (user == null) {
+        return 'اسم المستخدم غير موجود';
+      }
+      if (!user.isActive) {
+        return 'الحساب موقوف، تواصل مع المدير';
+      }
+      if (!HashHelper.verifyPassword(password, user.passwordHash)) {
+        return 'كلمة المرور غير صحيحة';
+      }
       _currentUser = user;
+      _currentCustomer = null;
+      _viewingAsCustomer = false;
+      _adminUser = null;
       _state = _roleToState(user.role);
       _pendingQuickAccess = false;
       await _saveSession('user', user.id!);
@@ -136,15 +149,22 @@ class AuthProvider extends ChangeNotifier {
       final dao = UserDao();
       final user = await dao.findByLoginCode(code.trim());
       if (user != null) {
-        if (!user.isActive) return 'الحساب موقوف، تواصل مع المدير';
+        if (!user.isActive) {
+          return 'الحساب موقوف، تواصل مع المدير';
+        }
         // Feature 3: check code expiry
         if (user.isCodeExpired) {
           return 'انتهت صلاحية كود الدخول (مؤقت). تواصل مع المدير للحصول على كود جديد';
         }
-        if (expectedRole.isNotEmpty && user.role != expectedRole && user.role != 'admin') {
+        if (expectedRole.isNotEmpty &&
+            user.role != expectedRole &&
+            user.role != 'admin') {
           return 'كود الدخول غير صحيح لهذا النوع من الحسابات';
         }
         _currentUser = user;
+        _currentCustomer = null;
+        _viewingAsCustomer = false;
+        _adminUser = null;
         _state = _roleToState(user.role);
         _pendingQuickAccess = false;
         await _saveSession('user', user.id!);
@@ -163,12 +183,23 @@ class AuthProvider extends ChangeNotifier {
     try {
       final dao = CustomerDao();
       final customer = await dao.findByLoginCode(code.trim());
-      if (customer == null) return 'كود الدخول غير صحيح';
-      if (!customer.isActive) return 'الحساب موقوف، تواصل مع المدير';
+      if (customer == null) {
+        return 'كود الدخول غير صحيح';
+      }
+      if (!customer.isActive) {
+        return 'الحساب موقوف، تواصل مع المدير';
+      }
       // Feature 12: block blacklisted customers
-      if (customer.isBlacklisted) return 'حسابك محظور. تواصل مع الإدارة لمزيد من المعلومات';
-      if (!customer.isApproved) return 'لم يتم الموافقة على حسابك بعد. تواصل مع الإدارة';
+      if (customer.isBlacklisted) {
+        return 'حسابك محظور. تواصل مع الإدارة لمزيد من المعلومات';
+      }
+      if (!customer.isApproved) {
+        return 'لم يتم الموافقة على حسابك بعد. تواصل مع الإدارة';
+      }
+      _currentUser = null;
       _currentCustomer = customer;
+      _viewingAsCustomer = false;
+      _adminUser = null;
       _state = AuthState.customer;
       _pendingQuickAccess = false;
       await _saveSession('customer', customer.id!);
@@ -182,16 +213,28 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<String?> registerCustomer({
-    required String name, required String fullName, required String phone,
-    required String whatsapp, required String email,
-    required String homeAddress, required String workAddress, required String storeType,
+    required String name,
+    required String fullName,
+    required String phone,
+    required String whatsapp,
+    required String email,
+    required String homeAddress,
+    required String workAddress,
+    required String storeType,
   }) async {
     final dao = CustomerDao();
     final now = DateTime.now().toIso8601String();
     final customer = Customer(
-      name: name, fullName: fullName, phone: phone, whatsapp: whatsapp,
-      email: email, homeAddress: homeAddress, workAddress: workAddress,
-      storeType: storeType, isApproved: false, createdAt: now,
+      name: name,
+      fullName: fullName,
+      phone: phone,
+      whatsapp: whatsapp,
+      email: email,
+      homeAddress: homeAddress,
+      workAddress: workAddress,
+      storeType: storeType,
+      isApproved: false,
+      createdAt: now,
     );
     await dao.insert(customer);
     return null;
@@ -213,11 +256,19 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> changePassword(String currentPassword, String newPassword) async {
-    if (_currentUser == null) return 'غير مسجل دخول';
-    if (!HashHelper.verifyPassword(currentPassword, _currentUser!.passwordHash)) return 'كلمة المرور الحالية غير صحيحة';
+  Future<String?> changePassword(
+      String currentPassword, String newPassword) async {
+    if (_currentUser == null) {
+      return 'غير مسجل دخول';
+    }
+    if (!HashHelper.verifyPassword(
+        currentPassword, _currentUser!.passwordHash)) {
+      return 'كلمة المرور الحالية غير صحيحة';
+    }
     final dao = UserDao();
-    final updated = _currentUser!.copyWith(passwordHash: HashHelper.hashPassword(newPassword), mustChangePassword: false);
+    final updated = _currentUser!.copyWith(
+        passwordHash: HashHelper.hashPassword(newPassword),
+        mustChangePassword: false);
     await dao.update(updated);
     _currentUser = updated;
     notifyListeners();
@@ -225,7 +276,9 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<String?> changeMyLoginCode(String newCode) async {
-    if (newCode.trim().length < 4) return 'الكود يجب أن يكون 4 أحرف على الأقل';
+    if (newCode.trim().length < 4) {
+      return 'الكود يجب أن يكون 4 أحرف على الأقل';
+    }
     if (_currentCustomer != null) {
       final dao = CustomerDao();
       await dao.updateLoginCode(_currentCustomer!.id!, newCode.trim());
@@ -243,7 +296,9 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<String?> changeName(String newName) async {
-    if (newName.trim().isEmpty) return 'الاسم لا يمكن أن يكون فارغاً';
+    if (newName.trim().isEmpty) {
+      return 'الاسم لا يمكن أن يكون فارغاً';
+    }
     if (_currentCustomer != null) {
       final dao = CustomerDao();
       final updated = _currentCustomer!.copyWith(name: newName.trim());
@@ -256,11 +311,17 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<String?> changeUsername(String newUsername, String password) async {
-    if (_currentUser == null) return 'غير مسجل دخول';
-    if (!HashHelper.verifyPassword(password, _currentUser!.passwordHash)) return 'كلمة المرور غير صحيحة';
+    if (_currentUser == null) {
+      return 'غير مسجل دخول';
+    }
+    if (!HashHelper.verifyPassword(password, _currentUser!.passwordHash)) {
+      return 'كلمة المرور غير صحيحة';
+    }
     final dao = UserDao();
     final existing = await dao.findByUsername(newUsername);
-    if (existing != null && existing.id != _currentUser!.id) return 'اسم المستخدم مستخدم بالفعل';
+    if (existing != null && existing.id != _currentUser!.id) {
+      return 'اسم المستخدم مستخدم بالفعل';
+    }
     final updated = _currentUser!.copyWith(username: newUsername);
     await dao.update(updated);
     _currentUser = updated;
@@ -313,11 +374,16 @@ class AuthProvider extends ChangeNotifier {
 
   AuthState _roleToState(String role) {
     switch (role) {
-      case AppConstants.roleAdmin: return AuthState.admin;
-      case AppConstants.roleManager: return AuthState.manager;
-      case AppConstants.rolePartner: return AuthState.partner;
-      case AppConstants.roleEmployee: return AuthState.employee;
-      default: return AuthState.admin;
+      case AppConstants.roleAdmin:
+        return AuthState.admin;
+      case AppConstants.roleManager:
+        return AuthState.manager;
+      case AppConstants.rolePartner:
+        return AuthState.partner;
+      case AppConstants.roleEmployee:
+        return AuthState.employee;
+      default:
+        return AuthState.admin;
     }
   }
 }

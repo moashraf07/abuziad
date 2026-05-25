@@ -10,9 +10,7 @@ import '../../../providers/installment_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../models/item.dart';
 import '../../../models/customer.dart';
-import '../../../models/app_settings.dart';
 import '../../../models/installment_product.dart';
-import '../../../database/daos/app_settings_dao.dart';
 import '../../../database/daos/installment_product_dao.dart';
 import '../../../utils/constants.dart';
 import '../../../utils/formatters.dart';
@@ -30,6 +28,7 @@ class SalesInvoiceScreen extends StatefulWidget {
 class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
   final _barcodeCtrl = TextEditingController();
   final _productSearchCtrl = TextEditingController();
+  final _manualPointsCtrl = TextEditingController(text: '0');
   String _productQuery = '';
   List<Customer> _selectedCustomers = [];
   List<Customer> _selectedTechnicians = [];
@@ -44,7 +43,6 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
   Timer? _autoSaveTimer;
   String? _draftKey;
   bool _draftSaved = false;
-  AppSettings _appSettings = const AppSettings();
 
   @override
   void initState() {
@@ -54,7 +52,6 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
       context.read<SalesProvider>().clearCart();
       _draftKey = 'invoice_draft_${DateTime.now().millisecondsSinceEpoch}';
       _startAutoSave();
-      _loadSettings();
       _loadTechnicians();
       _loadStoreProducts();
     });
@@ -65,14 +62,8 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
     _autoSaveTimer?.cancel();
     _barcodeCtrl.dispose();
     _productSearchCtrl.dispose();
+    _manualPointsCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadSettings() async {
-    try {
-      final s = await AppSettingsDao().getSettings();
-      if (mounted) setState(() => _appSettings = s);
-    } catch (_) {}
   }
 
   Future<void> _loadStoreProducts() async {
@@ -113,13 +104,6 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
           .toList();
       if (mounted) setState(() => _technicians = techs);
     } catch (_) {}
-  }
-
-  int _calcPoints(double total) {
-    if (total <= 0) return 0;
-    if (_appSettings.pointsPerCurrency <= 0) return 0;
-    final points = (total * _appSettings.pointsPerCurrency).floor();
-    return points == 0 ? 1 : points;
   }
 
   static String _storeTypeLabel(String storeType) {
@@ -398,6 +382,31 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
     );
   }
 
+  void _openPointsScreen() {
+    final recipient = _selectedCustomers.isNotEmpty
+        ? _selectedCustomers.first
+        : _selectedTechnicians.isNotEmpty
+            ? _selectedTechnicians.first
+            : null;
+
+    if (recipient == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('اختر عميل أو فني أولاً لعرض نقاطه'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CustomerPointsScreen(customer: recipient),
+      ),
+    );
+  }
+
   Future<void> _saveInvoice() async {
     final sales = context.read<SalesProvider>();
     if (sales.cart.isEmpty) {
@@ -413,6 +422,30 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
       );
       return;
     }
+
+    final manualPoints = int.tryParse(_manualPointsCtrl.text.trim()) ?? 0;
+    final recipients = [..._selectedCustomers, ..._selectedTechnicians];
+
+    if (manualPoints < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يمكن أن تكون نقاط الولاء سالبة'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (manualPoints > 0 && recipients.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('اختر عميل أو فني واحد على الأقل قبل إدخال النقاط'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
     try {
       final double paid =
@@ -436,55 +469,40 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
               invoiceId: id,
             );
       }
-      // ── Log points for all selected customers and technicians ─────────────
-      String? _pointsErrorMsg;
-      int _totalPointsLogged = 0;
-      final _today = DateTime.now().toIso8601String().substring(0, 10);
-      final _invoiceLabel = 'INV-$id';
-      final _allRecipients = [
-        ..._selectedCustomers,
-        ..._selectedTechnicians,
-      ];
-      final pts = _calcPoints(sales.total);
 
-      if (_allRecipients.isNotEmpty && _appSettings.pointsPerCurrency <= 0) {
-        _pointsErrorMsg =
-            'قيمة نقاط الولاء غير صالحة. اضبط points_per_currency في إعدادات التطبيق.';
-      }
+      String? pointsError;
+      int totalPointsLogged = 0;
+      final today = DateTime.now().toIso8601String().substring(0, 10);
+      final invoiceLabel = 'INV-$id';
 
-      for (final recipient in _allRecipients) {
-        if (recipient.id == null || pts <= 0) continue;
+      for (final recipient in recipients) {
+        if (recipient.id == null || manualPoints <= 0) continue;
         try {
           await context.read<CustomerProvider>().logPointsForInvoice(
-                customerId: recipient.id!,
-                invoiceId: id,
-                invoiceNo: _invoiceLabel,
-                date: _today,
-                pointsEarned: pts,
-                pointValue: _appSettings.pointValueInUnit,
-                pointCurrency: _appSettings.pointCurrencyType,
-              );
-          _totalPointsLogged += pts;
+            customerId: recipient.id!,
+            invoiceId: id,
+            invoiceNo: invoiceLabel,
+            date: today,
+            pointsEarned: manualPoints,
+            pointValue: 1.0,
+            pointCurrency: 'piasters',
+          );
+          totalPointsLogged += manualPoints;
         } catch (e) {
-          _pointsErrorMsg = (_pointsErrorMsg == null ? '' : '$_pointsErrorMsg\n') +
-              'عميل ${recipient.name}: $e';
+          pointsError = (pointsError == null ? '' : '$pointsError\n') +
+              '${recipient.name}: $e';
         }
       }
 
-      // Refresh provider so badges update — await so the new data is ready
       if (mounted) {
         await context.read<CustomerProvider>().loadAll();
-      }
-
-      if (mounted) {
         setState(() => _saving = false);
 
-        // ── Error saving points ───────────────────────────────────────────
-        if (_pointsErrorMsg != null) {
+        if (pointsError != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'تم حفظ الفاتورة #$id ✓\n⚠️ فشل تسجيل بعض النقاط:\n$_pointsErrorMsg',
+                'تم حفظ الفاتورة #$id ✓\n⚠️ فشل تسجيل بعض النقاط:\n$pointsError',
                 style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
               backgroundColor: Colors.orange.shade800,
@@ -495,8 +513,7 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
           return;
         }
 
-        // ── No points logged — just pop ───────────────────────────────────
-        if (_totalPointsLogged == 0 || _allRecipients.isEmpty) {
+        if (totalPointsLogged == 0) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('تم حفظ الفاتورة #$id ✓',
@@ -508,10 +525,6 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
           Navigator.pop(context);
           return;
         }
-
-        // ── Points logged — show dialog with option to view points ─────────
-        final firstRecipient = _allRecipients.first;
-        final multipleRecipients = _allRecipients.length > 1;
 
         showDialog(
           context: context,
@@ -544,7 +557,7 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '+$_totalPointsLogged نقطة',
+                            '+$totalPointsLogged نقطة',
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -552,9 +565,9 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
                             ),
                           ),
                           Text(
-                            multipleRecipients
-                                ? 'موزعة على ${_allRecipients.length} عملاء/فنيين'
-                                : 'لـ ${firstRecipient.name}',
+                            recipients.length == 1
+                                ? 'لـ ${recipients.first.name}'
+                                : 'موزعة على ${recipients.length} عملاء/فنيين',
                             style: TextStyle(
                                 fontSize: 12, color: Colors.amber.shade700),
                           ),
@@ -562,14 +575,6 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
                   ),
                 ]),
               ),
-              if (multipleRecipients) ...[
-                const SizedBox(height: 10),
-                Text(
-                  'هل تريد عرض نقاط ${firstRecipient.name}؟',
-                  style: const TextStyle(fontSize: 13),
-                  textAlign: TextAlign.center,
-                ),
-              ],
             ]),
             actions: [
               TextButton(
@@ -587,14 +592,14 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
                       borderRadius: BorderRadius.circular(8)),
                 ),
                 icon: const Icon(Icons.stars_rounded, size: 18),
-                label: Text('نقاط ${firstRecipient.name}'),
+                label: Text('نقاط ${recipients.first.name}'),
                 onPressed: () {
                   Navigator.pop(dialogCtx);
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
                       builder: (_) =>
-                          CustomerPointsScreen(customer: firstRecipient),
+                          CustomerPointsScreen(customer: recipients.first),
                     ),
                   );
                 },
@@ -706,6 +711,7 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
                 _amountPaid = 0;
                 _invoiceDiscount = 0;
                 _barcodeCtrl.clear();
+                _manualPointsCtrl.text = '0';
               });
             },
             icon: const Icon(Icons.add, color: Colors.white, size: 18),
@@ -725,9 +731,17 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
                 _amountPaid = 0;
                 _invoiceDiscount = 0;
                 _barcodeCtrl.clear();
+                _manualPointsCtrl.text = '0';
               });
             },
           ),
+        IconButton(
+          tooltip: 'عرض النقاط',
+          icon: const Icon(Icons.stars, color: Colors.white),
+          onPressed: (_selectedCustomers.isEmpty && _selectedTechnicians.isEmpty)
+              ? null
+              : _openPointsScreen,
+        ),
         IconButton(
           tooltip: 'طباعة',
           icon: const Icon(Icons.print, color: Colors.white),
@@ -1085,33 +1099,6 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
                     valueColor: Colors.purple,
                   ),
                 ],
-                if (_calcPoints(sales.total) > 0)
-                  Container(
-                    margin: const EdgeInsets.only(top: 4),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade50,
-                      borderRadius: BorderRadius.circular(6),
-                      border:
-                          Border.all(color: Colors.amber.shade200),
-                    ),
-                    child: Row(children: [
-                      const Icon(Icons.stars,
-                          color: Colors.amber, size: 14),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          'كل عميل سيكسب: +${_calcPoints(sales.total)} نقطة',
-                          style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.amber,
-                              fontWeight: FontWeight.w600),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ]),
-                  ),
               ],
             ),
     );
@@ -1172,95 +1159,75 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
                   ],
                 ),
         ),
-        if (_selectedTechnicians.isNotEmpty &&
-            _calcPoints(sales.total) > 0) ...[
-          const SizedBox(width: 8),
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.teal.shade100,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '+${_calcPoints(sales.total)} نقطة/فني',
-                style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.teal,
-                    fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-        ],
       ]),
     );
   }
 
   Widget _buildPointsRow(SalesProvider sales) {
+    final recipients = [..._selectedCustomers, ..._selectedTechnicians];
+    final manualPoints = int.tryParse(_manualPointsCtrl.text.trim()) ?? 0;
+
     return Container(
       color: Colors.deepPurple.shade50,
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.stars,
-                color: Colors.deepPurple, size: 16),
-            const SizedBox(width: 4),
-            const Text('النقاط:',
+          Row(children: [
+            const Icon(Icons.stars, color: Colors.deepPurple, size: 16),
+            const SizedBox(width: 6),
+            const Text('إدخال النقاط يدوياً',
                 style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                     color: Colors.deepPurple)),
           ]),
-          ..._selectedCustomers.map((c) => Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade100,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.amber.shade400),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.person,
-                      size: 12, color: Colors.amber),
-                  const SizedBox(width: 3),
-                  Text(
-                      '${c.name}: +${_calcPoints(sales.total)} نقطة',
-                      style: const TextStyle(
-                          fontSize: 11,
-                          color: Colors.amber,
-                          fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis),
-                ]),
-              )),
-          ..._selectedTechnicians.map((t) => Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.teal.shade100,
-                  borderRadius: BorderRadius.circular(10),
-                  border:
-                      Border.all(color: Colors.teal.shade400),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.engineering,
-                      size: 12, color: Colors.teal),
-                  const SizedBox(width: 3),
-                  Text(
-                      '${t.name}: +${_calcPoints(sales.total)} نقطة',
-                      style: const TextStyle(
-                          fontSize: 11,
-                          color: Colors.teal,
-                          fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis),
-                ]),
-              )),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _manualPointsCtrl,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: 'عدد النقاط لكل مستلم',
+              hintText: 'اكتب رقم النقاط',
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              suffixText: 'نقطة',
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 8),
+          if (recipients.isNotEmpty)
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: recipients.map((recipient) {
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.deepPurple.shade100),
+                  ),
+                  child: Text(
+                    '${recipient.name}: ${manualPoints > 0 ? '+$manualPoints' : '0'} نقطة',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.deepPurple,
+                        fontWeight: FontWeight.w600),
+                  ),
+                );
+              }).toList(),
+            ),
+          if (recipients.isEmpty)
+            Text(
+              'اختر عميل أو فني لتفعيل إدخال النقاط',
+              style: TextStyle(fontSize: 11, color: Colors.deepPurple.shade300),
+            ),
         ],
       ),
     );
@@ -1391,9 +1358,7 @@ class _SalesInvoiceScreenState extends State<SalesInvoiceScreen> {
             itemBuilder: (ctx, i) => _CartItemRow(
               index: i,
               cartItem: sales.cart[i],
-              technicianPoints: _selectedTechnicians.isNotEmpty
-                  ? _calcPoints(sales.cart[i].total)
-                  : 0,
+              technicianPoints: 0,
             ),
           ),
         ),

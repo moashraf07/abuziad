@@ -1163,6 +1163,7 @@ class _PricingSheetScreenState extends State<_PricingSheetScreen> {
         notes: 'طلب تسعير كشف',
         date: DateTime.now().toIso8601String().substring(0, 10),
         createdAt: DateTime.now().toIso8601String(),
+        customerStoreType: AppConstants.storeElectrical,
         items: sel.map((p) {
           final qty = _qty[p.id!] ?? 1;
           final price = p.effectiveCashPrice > 0 ? p.effectiveCashPrice : p.effectiveInstallmentPrice;

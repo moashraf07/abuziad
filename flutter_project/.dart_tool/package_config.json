@@ -231,7 +231,7 @@
     },
     {
       "name": "flutter",
-      "rootUri": "file:///workspaces/abuziad/flutter/packages/flutter",
+      "rootUri": "file:///home/codespace/flutter/packages/flutter",
       "packageUri": "lib/",
       "languageVersion": "3.10"
     },
@@ -279,13 +279,13 @@
     },
     {
       "name": "flutter_test",
-      "rootUri": "file:///workspaces/abuziad/flutter/packages/flutter_test",
+      "rootUri": "file:///home/codespace/flutter/packages/flutter_test",
       "packageUri": "lib/",
       "languageVersion": "3.10"
     },
     {
       "name": "flutter_web_plugins",
-      "rootUri": "file:///workspaces/abuziad/flutter/packages/flutter_web_plugins",
+      "rootUri": "file:///home/codespace/flutter/packages/flutter_web_plugins",
       "packageUri": "lib/",
       "languageVersion": "3.10"
     },
@@ -729,7 +729,7 @@
     },
     {
       "name": "sky_engine",
-      "rootUri": "file:///workspaces/abuziad/flutter/bin/cache/pkg/sky_engine",
+      "rootUri": "file:///home/codespace/flutter/bin/cache/pkg/sky_engine",
       "packageUri": "lib/",
       "languageVersion": "3.10"
     },
@@ -922,7 +922,7 @@
   ],
   "generator": "pub",
   "generatorVersion": "3.12.0",
-  "flutterRoot": "file:///workspaces/abuziad/flutter",
+  "flutterRoot": "file:///home/codespace/flutter",
   "flutterVersion": "3.44.0",
   "pubCache": "file:///home/codespace/.pub-cache"
 }

@@ -99,6 +99,7 @@ class _CustomerCreateInvoiceScreenState extends State<CustomerCreateInvoiceScree
         receiptPath: _receiptImage?.path, status: 'pending',
         notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         date: now, createdAt: now,
+        customerStoreType: widget.storeType,
         items: _entries.map((e) => CustomerInvoiceItem(
           itemName: e.name, qty: e.qty, unitPrice: e.unitPrice,
           total: e.total, itemId: e.itemId,

@@ -8,9 +8,9 @@ import '../../../providers/inventory_provider.dart';
 import '../../../services/push_notification_service.dart';
 import '../../../utils/constants.dart';
 import '../../../utils/formatters.dart';
-import '../../../utils/image_helper.dart';
 import '../../../utils/notification_messages.dart';
 import '../../widgets/barcode_scanner_screen.dart';
+import '../customer_invoices/customer_invoices_admin_screen.dart';
 
 /// كشف الأسعار — يتيح للعميل اختيار منتجات وكميات ونوع السعر
 /// ثم تحويله لفاتورة بضغطة واحدة.
@@ -49,8 +49,7 @@ class _PriceSheetScreenState extends State<PriceSheetScreen> {
     super.dispose();
   }
 
-  double get _total =>
-      _items.fold(0.0, (s, i) => s + i.total(_priceType));
+  double get _total => _items.fold(0.0, (s, i) => s + i.total(_priceType));
 
   Future<void> _search(String query) async {
     final provider = context.read<InventoryProvider>();
@@ -76,7 +75,8 @@ class _PriceSheetScreenState extends State<PriceSheetScreen> {
   void _addItem(Item item) {
     final existing = _items.indexWhere((i) => i.item.id == item.id);
     if (existing >= 0) {
-      setState(() => _items[existing] = _items[existing].copyWith(qty: _items[existing].qty + 1));
+      setState(() => _items[existing] =
+          _items[existing].copyWith(qty: _items[existing].qty + 1));
     } else {
       setState(() => _items.add(_SheetItem(item: item, qty: 1)));
     }
@@ -108,13 +108,16 @@ class _PriceSheetScreenState extends State<PriceSheetScreen> {
         status: 'pending',
         date: now.substring(0, 10),
         createdAt: now,
-        items: _items.map((si) => CustomerInvoiceItem(
-          itemId: si.item.id,
-          itemName: si.item.name,
-          qty: si.qty.toDouble(),
-          unitPrice: si.item.priceForType(_priceType),
-          total: si.total(_priceType),
-        )).toList(),
+        customerStoreType: customer.storeType,
+        items: _items
+            .map((si) => CustomerInvoiceItem(
+                  itemId: si.item.id,
+                  itemName: si.item.name,
+                  qty: si.qty.toDouble(),
+                  unitPrice: si.item.priceForType(_priceType),
+                  total: si.total(_priceType),
+                ))
+            .toList(),
       );
       final insertedId = await CustomerInvoiceDao().insertInvoice(invoice);
       PushNotificationService.sendToRole(
@@ -130,6 +133,11 @@ class _PriceSheetScreenState extends State<PriceSheetScreen> {
           _items.clear();
           _searchResults = [];
         });
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => const CustomerInvoicesAdminScreen()),
+        );
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('تم إرسال طلب الفاتورة برقم $invoiceNo'),
           backgroundColor: Colors.green,
@@ -173,7 +181,8 @@ class _PriceSheetScreenState extends State<PriceSheetScreen> {
             color: Colors.grey.shade50,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(children: [
-              const Text('نوع السعر:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const Text('نوع السعر:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(width: 12),
               Expanded(
                 child: SingleChildScrollView(
@@ -186,11 +195,14 @@ class _PriceSheetScreenState extends State<PriceSheetScreen> {
                         child: ChoiceChip(
                           label: Text(e.value),
                           selected: selected,
-                          onSelected: (_) => setState(() { _priceType = e.key; }),
+                          onSelected: (_) => setState(() {
+                            _priceType = e.key;
+                          }),
                           selectedColor: const Color(AppColors.primaryInt),
                           labelStyle: TextStyle(
                             color: selected ? Colors.white : Colors.black87,
-                            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                            fontWeight:
+                                selected ? FontWeight.bold : FontWeight.normal,
                           ),
                         ),
                       );
@@ -222,8 +234,10 @@ class _PriceSheetScreenState extends State<PriceSheetScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(AppColors.accentInt),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                 ),
                 onPressed: _scanBarcode,
                 child: const Icon(Icons.qr_code_scanner),
@@ -246,7 +260,8 @@ class _PriceSheetScreenState extends State<PriceSheetScreen> {
                   return ListTile(
                     dense: true,
                     title: Text(item.name),
-                    subtitle: Text('المخزون: ${item.quantity} | السعر: ${AppFormatters.formatCurrency(price)}'),
+                    subtitle: Text(
+                        'المخزون: ${item.quantity} | السعر: ${AppFormatters.formatCurrency(price)}'),
                     trailing: IconButton(
                       icon: const Icon(Icons.add_circle, color: Colors.green),
                       onPressed: () => _addItem(item),
@@ -261,7 +276,8 @@ class _PriceSheetScreenState extends State<PriceSheetScreen> {
             child: _items.isEmpty
                 ? Center(
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.price_check, size: 72, color: Colors.grey.shade300),
+                      Icon(Icons.price_check,
+                          size: 72, color: Colors.grey.shade300),
                       const SizedBox(height: 16),
                       const Text('ابحث عن منتج وأضفه للكشف',
                           style: TextStyle(color: Colors.grey, fontSize: 15)),
@@ -273,42 +289,56 @@ class _PriceSheetScreenState extends State<PriceSheetScreen> {
                       final si = _items[i];
                       final price = si.item.priceForType(_priceType);
                       return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        margin: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                           child: Row(children: [
                             Expanded(
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Text(si.item.name,
-                                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                                Text('${AppFormatters.formatCurrency(price)} / قطعة',
-                                    style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                              ]),
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(si.item.name,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold)),
+                                    Text(
+                                        '${AppFormatters.formatCurrency(price)} / قطعة',
+                                        style: const TextStyle(
+                                            color: Colors.grey, fontSize: 12)),
+                                  ]),
                             ),
                             // Qty controls
                             Row(mainAxisSize: MainAxisSize.min, children: [
                               IconButton(
-                                icon: const Icon(Icons.remove_circle_outline, size: 20),
+                                icon: const Icon(Icons.remove_circle_outline,
+                                    size: 20),
                                 onPressed: () {
                                   if (si.qty > 1) {
-                                    setState(() => _items[i] = si.copyWith(qty: si.qty - 1));
+                                    setState(() => _items[i] =
+                                        si.copyWith(qty: si.qty - 1));
                                   } else {
                                     setState(() => _items.removeAt(i));
                                   }
                                 },
                               ),
-                              Text('${si.qty}', style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
+                              Text('${si.qty}',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16)),
                               IconButton(
-                                icon: const Icon(Icons.add_circle_outline, size: 20),
-                                onPressed: () => setState(() => _items[i] = si.copyWith(qty: si.qty + 1)),
+                                icon: const Icon(Icons.add_circle_outline,
+                                    size: 20),
+                                onPressed: () => setState(() =>
+                                    _items[i] = si.copyWith(qty: si.qty + 1)),
                               ),
                             ]),
                             // Total
                             SizedBox(
                               width: 80,
                               child: Text(
-                                AppFormatters.formatCurrency(si.total(_priceType)),
+                                AppFormatters.formatCurrency(
+                                    si.total(_priceType)),
                                 textAlign: TextAlign.end,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
@@ -336,9 +366,9 @@ class _PriceSheetScreenState extends State<PriceSheetScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('عدد الأصناف:',
-                        style: TextStyle(fontSize: 14)),
-                    Text('${_items.length} صنف — ${_items.fold(0, (s, i) => s + i.qty)} قطعة',
+                    const Text('عدد الأصناف:', style: TextStyle(fontSize: 14)),
+                    Text(
+                        '${_items.length} صنف — ${_items.fold(0, (s, i) => s + i.qty)} قطعة',
                         style: const TextStyle(fontSize: 14)),
                   ],
                 ),
@@ -347,11 +377,14 @@ class _PriceSheetScreenState extends State<PriceSheetScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('الإجمالي:',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 18)),
                     Text(
                       AppFormatters.formatCurrency(_total),
                       style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 20, color: Colors.green),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                          color: Colors.green),
                     ),
                   ],
                 ),
@@ -363,15 +396,20 @@ class _PriceSheetScreenState extends State<PriceSheetScreen> {
                       backgroundColor: const Color(AppColors.primaryInt),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
                     ),
                     onPressed: _sending ? null : _sendInvoiceRequest,
                     icon: _sending
-                        ? const SizedBox(width: 18, height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.receipt_long),
                     label: const Text('إرسال طلب فاتورة',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ]),
@@ -389,5 +427,6 @@ class _SheetItem {
 
   double total(String priceType) => item.priceForType(priceType) * qty;
 
-  _SheetItem copyWith({int? qty}) => _SheetItem(item: item, qty: qty ?? this.qty);
+  _SheetItem copyWith({int? qty}) =>
+      _SheetItem(item: item, qty: qty ?? this.qty);
 }

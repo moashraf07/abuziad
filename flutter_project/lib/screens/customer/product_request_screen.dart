@@ -287,6 +287,7 @@ class _ProductRequestScreenState extends State<ProductRequestScreen> {
         notes: 'طلب منتج: $productName',
         date: now.substring(0, 10),
         createdAt: now,
+        customerStoreType: requestStoreType,
         items: [
           CustomerInvoiceItem(
             itemId: widget.item?.id ?? widget.installmentProduct?.id,
