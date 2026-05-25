@@ -72,9 +72,11 @@ class RequestDao {
     }).toList();
 
     if (storeType != null) {
-      return result.where((m) =>
-        m['customer_store_type'] == storeType ||
-        m['store_type'] == storeType).toList();
+      return result.where((m) {
+        final customerStore = (m['customer_store_type'] as String?)?.trim();
+        final requestStore = (m['store_type'] as String?)?.trim();
+        return customerStore == storeType || requestStore == storeType;
+      }).toList();
     }
     return result;
   }

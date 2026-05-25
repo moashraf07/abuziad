@@ -12,6 +12,8 @@ import '../../../models/app_settings.dart';
 import '../../../models/installment_product.dart';
 import '../../../models/product_image.dart';
 import '../../../models/item_group.dart';
+import '../../../models/partner_group.dart';
+import '../../../database/daos/partner_group_dao.dart';
 import '../../../utils/constants.dart';
 import '../../../utils/formatters.dart';
 import 'product_detail_screen.dart';
@@ -447,6 +449,12 @@ class _ProductFormScreenState extends State<_ProductFormScreen> {
   List<String> _imagePaths = [];
   bool _saving = false;
 
+  // ── Partner group assignment ─────────────────────────────────────────────
+  final _partnerGroupDao = PartnerGroupDao();
+  List<PartnerGroup> _partnerGroups = [];
+  List<int> _selectedGroupIds = [];
+  bool _loadingPartnerGroups = true;
+
   // ── Installment rate settings (global) ────────────────────────────────────
   final _rateSettingsDao = AppSettingsDao();
   AppSettings _rateSettings = const AppSettings();
@@ -471,6 +479,7 @@ class _ProductFormScreenState extends State<_ProductFormScreen> {
             ? widget.product!.companyPercentage.toStringAsFixed(1)
             : '0'));
     _loadRateSettings();
+    _loadPartnerGroups();
     final p = widget.product;
     _nameCtrl = TextEditingController(text: p?.name ?? '');
     _descCtrl = TextEditingController(text: p?.description ?? '');
@@ -511,6 +520,66 @@ class _ProductFormScreenState extends State<_ProductFormScreen> {
       setState(() { _rateSettings = s; _loadingRateSettings = false; });
     } catch (_) {
       if (mounted) setState(() => _loadingRateSettings = false);
+    }
+  }
+
+  Future<void> _loadPartnerGroups() async {
+    try {
+      final groups = await _partnerGroupDao.getAllGroups();
+      List<int> selected = [];
+      final p = widget.product;
+      if (p?.id != null) {
+        final itemId = p!.id!;
+        final rows = await Supabase.instance.client
+            .from('product_group_assignments')
+            .select('group_id')
+            .eq('item_id', itemId);
+        selected = List<Map<String, dynamic>>.from(rows)
+            .map((r) => (r['group_id'] as int))
+            .toList();
+      }
+      if (!mounted) return;
+      setState(() {
+        _partnerGroups = groups;
+        _selectedGroupIds = selected;
+        _loadingPartnerGroups = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingPartnerGroups = false);
+    }
+  }
+
+  Future<void> _syncProductGroupAssignments(int productId, String itemName, double salePrice) async {
+    try {
+      final existingRows = await Supabase.instance.client
+          .from('product_group_assignments')
+          .select('id,group_id')
+          .eq('item_id', productId);
+      final existing = List<Map<String, dynamic>>.from(existingRows);
+      final existingIds = existing.map((r) => (r['group_id'] as int)).toSet();
+      final selectedIds = _selectedGroupIds.toSet();
+
+      for (final row in existing) {
+        final gid = (row['group_id'] as int);
+        if (!selectedIds.contains(gid)) {
+          await Supabase.instance.client
+              .from('product_group_assignments')
+              .delete()
+              .eq('id', row['id']);
+        }
+      }
+      for (final groupId in selectedIds) {
+        if (!existingIds.contains(groupId)) {
+          await _partnerGroupDao.assignProductToGroup(
+            itemId: productId,
+            itemName: itemName,
+            groupId: groupId,
+            salePrice: salePrice,
+          );
+        }
+      }
+    } catch (_) {
+      // ignore sync failures silently
     }
   }
 
@@ -663,6 +732,7 @@ class _ProductFormScreenState extends State<_ProductFormScreen> {
           createdAt: now2,
         ));
       }
+      await _syncProductGroupAssignments(savedId, product.name, product.effectiveCashPrice);
       await _saveRateSettings();
       widget.onSaved();
       if (mounted) {
@@ -971,7 +1041,7 @@ class _ProductFormScreenState extends State<_ProductFormScreen> {
             ],
 
             // ─── Category ───────────────────────────────────────────────────
-            DropdownButtonFormField<String?>(
+            DropdownButtonFormField<String?> (
               value: _selectedCategory,
               decoration: const InputDecoration(labelText: 'الفئة', prefixIcon: Icon(Icons.category)),
               items: [
@@ -983,6 +1053,34 @@ class _ProductFormScreenState extends State<_ProductFormScreen> {
               onChanged: (v) => setState(() => _selectedCategory = v),
             ),
             const SizedBox(height: 12),
+            if (_partnerGroups.isNotEmpty) ...[
+              const Text('تعيين المنتج للمجموعات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 8),
+              if (_loadingPartnerGroups)
+                const SizedBox(height: 36, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _partnerGroups.map((group) {
+                    final selected = _selectedGroupIds.contains(group.id);
+                    return FilterChip(
+                      label: Text(group.name),
+                      selected: selected,
+                      onSelected: (enabled) {
+                        setState(() {
+                          if (enabled) {
+                            _selectedGroupIds.add(group.id!);
+                          } else {
+                            _selectedGroupIds.remove(group.id!);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              const SizedBox(height: 16),
+            ],
 
             // ─── Prices ─────────────────────────────────────────────────────
             const Text('الأسعار', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
@@ -14,6 +16,7 @@ import '../../../utils/constants.dart';
 import '../../../utils/formatters.dart';
 import '../../../utils/hash_helper.dart';
 import '../../../utils/whatsapp_helper.dart';
+import '../../../services/login_code_service.dart';
 import '../../customer/electrical_customer_home.dart';
 import '../../customer/installment_customer_home.dart';
 import '../../../services/push_notification_service.dart';
@@ -332,8 +335,7 @@ class _StaffTabState extends State<_StaffTab> {
                   icon: Icons.all_inclusive,
                   color: Colors.blue,
                   selected: codeType == AppConstants.codeTypePermanent,
-                  onTap: () => setS(() =>
-                      codeType = AppConstants.codeTypePermanent),
+                  onTap: () => setS(() => codeType = AppConstants.codeTypePermanent),
                 ),
               ),
               const SizedBox(width: 8),
@@ -344,46 +346,51 @@ class _StaffTabState extends State<_StaffTab> {
                   icon: Icons.timer,
                   color: Colors.orange,
                   selected: codeType == AppConstants.codeTypeTemporary,
-                  onTap: () => setS(() =>
-                      codeType = AppConstants.codeTypeTemporary),
+                  onTap: () => setS(() => codeType = AppConstants.codeTypeTemporary),
                 ),
               ),
             ]),
           ]),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('إلغاء')),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(AppColors.primaryInt),
                   foregroundColor: Colors.white),
               onPressed: () async {
                 Navigator.pop(ctx);
-                final code = _generateCode(u);
-                String? expiry;
-                if (codeType == AppConstants.codeTypeTemporary) {
-                  expiry = DateTime.now()
-                      .add(Duration(
-                          hours: AppConstants.temporaryCodeHours))
-                      .toIso8601String();
-                }
-                if (u.id != null) {
-                  await _dao.update(u.copyWith(
-                    loginCode: code,
-                    codeType: codeType,
-                    codeExpiry: expiry,
-                  ));
-                  _load();
+                if (u.id == null) return;
+                try {
+                  final svc = LoginCodeService();
+                  final code = await svc.generateAndAssign(
+                    u.id!,
+                    temporary: codeType == AppConstants.codeTypeTemporary,
+                    hours: AppConstants.temporaryCodeHours,
+                  );
+                  await _load();
                   if (codeType == AppConstants.codeTypeTemporary) {
                     PushNotificationService.broadcast(
                       title: 'كود دخول مؤقت',
-                      body: 'تم توليد كود مؤقت للمستخدم \${u.name} — ينتهي بعد \${AppConstants.temporaryCodeHours} ساعة',
+                      body: 'تم توليد كود مؤقت للمستخدم ${u.name} — ينتهي بعد ${AppConstants.temporaryCodeHours} ساعة',
                     );
                   }
+                  if (!mounted) return;
+                  _showCodeResult(u, code, codeType,
+                      codeType == AppConstants.codeTypeTemporary
+                          ? DateTime.now()
+                              .add(Duration(hours: AppConstants.temporaryCodeHours))
+                              .toIso8601String()
+                          : null);
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text('فشل توليد الكود: $e'),
+                    backgroundColor: Colors.red,
+                  ));
                 }
-                if (!mounted) return;
-                _showCodeResult(u, code, codeType, expiry);
               },
               child: const Text('توليد كود'),
             ),
@@ -478,6 +485,25 @@ class _StaffTabState extends State<_StaffTab> {
         ],
       ),
     );
+  }
+
+  Future<String> _generateUniqueCode(User u) async {
+    String code;
+    int attempts = 0;
+    do {
+      code = _generateCode(u);
+      final exists = await _dao.loginCodeExists(code);
+      if (!exists) {
+        return code;
+      }
+      attempts++;
+    } while (attempts < 10);
+
+    final random = Random();
+    do {
+      code = random.nextInt(1000000).toString().padLeft(6, '0');
+    } while (await _dao.loginCodeExists(code));
+    return code;
   }
 
   String _generateCode(User u) {

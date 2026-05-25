@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart';
 import '../../models/customer.dart';
 
 class CustomerDao {
@@ -63,12 +64,28 @@ class CustomerDao {
 
   Future<Customer?> findByLoginCode(String code) async {
     try {
+      final normalizedCode = code.trim();
       final r = await _client
           .from('customers')
           .select()
-          .eq('login_code', code)
+          .ilike('login_code', normalizedCode)
           .eq('is_active', true);
-      return r.isEmpty ? null : Customer.fromMap(r.first);
+      final list = r as List;
+      if (list.isEmpty) {
+        debugPrint('CustomerDao.findByLoginCode: no match for "$normalizedCode". Running diagnostic.');
+        print('CustomerDao.findByLoginCode: no match for "$normalizedCode". Running diagnostic.');
+        final diag = await _client
+            .from('customers')
+            .select('id, login_code, is_active, is_approved')
+            .ilike('login_code', '%$normalizedCode%')
+            .limit(10);
+        debugPrint('CustomerDao.findByLoginCode diagnostic result: $diag');
+        print('CustomerDao.findByLoginCode diagnostic result: $diag');
+        return null;
+      }
+      debugPrint('CustomerDao.findByLoginCode: found ${list.length} row(s) for "$normalizedCode".');
+      print('CustomerDao.findByLoginCode: found ${list.length} row(s) for "$normalizedCode".');
+      return Customer.fromMap(list.first as Map<String, dynamic>);
     } catch (_) {
       return null;
     }

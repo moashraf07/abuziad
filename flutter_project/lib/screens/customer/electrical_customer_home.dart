@@ -9,6 +9,7 @@ import '../../models/customer.dart';
 import '../../models/installment_product.dart';
 import '../../database/daos/installment_product_dao.dart';
 import '../../database/daos/customer_invoice_dao.dart';
+import '../../models/app_settings.dart';
 import '../../models/customer_invoice.dart';
 import '../../utils/constants.dart';
 import '../../utils/formatters.dart';
@@ -20,6 +21,7 @@ import '../admin/notifications/notifications_screen.dart';
 import '../../database/daos/electrical_bundle_dao.dart';
 import '../../models/electrical_bundle.dart';
 import '../../database/daos/request_dao.dart';
+import '../../database/daos/app_settings_dao.dart';
 import '../../models/product_request.dart';
 import '../../services/push_notification_service.dart';
 import '../../utils/notification_messages.dart';
@@ -60,13 +62,13 @@ class _ElectricalCustomerHomeState extends State<ElectricalCustomerHome> {
     final pages = [
       _ElectricalHomeTab(customer: customer, onBrowseProducts: () => setState(() => _tab = 1)),
       _ElectricalProductsTab(customer: customer),
-      _MyElectricalRequestsTab(customer: customer),
       _ElectricalBundlesTab(customer: customer),
       _CustomerInvoicesTab(customer: customer),
       CustomerInstallmentsScreen(customer: customer),
       CustomerProfileScreen(customer: customer),
     ];
 
+    final currentIndex = _tab.clamp(0, pages.length - 1);
     return Scaffold(
       appBar: AppBar(
         title: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -167,9 +169,9 @@ class _ElectricalCustomerHomeState extends State<ElectricalCustomerHome> {
           ),
         ],
       ),
-      body: IndexedStack(index: _tab, children: pages),
+      body: IndexedStack(index: currentIndex, children: pages),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _tab,
+        currentIndex: currentIndex,
         onTap: (i) => setState(() => _tab = i),
         type: BottomNavigationBarType.fixed,
         selectedItemColor: const Color(AppColors.primaryInt),
@@ -177,7 +179,6 @@ class _ElectricalCustomerHomeState extends State<ElectricalCustomerHome> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'الرئيسية'),
           BottomNavigationBarItem(icon: Icon(Icons.electrical_services), label: 'المنتجات'),
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: 'طلباتي'),
           BottomNavigationBarItem(icon: Icon(Icons.local_offer), label: 'الليستات'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'فواتيري'),
           BottomNavigationBarItem(icon: Icon(Icons.payment), label: 'أقساطي'),
@@ -544,6 +545,27 @@ class _ElectricalProductDetailSheetState
   int _qty = 1;
   bool _saving = false;
   int _imgIndex = 0;
+  int _selectedMonths = 1;
+  bool _loadingSettings = true;
+  AppSettings _settings = const AppSettings();
+  final _invoiceDao = CustomerInvoiceDao();
+  final _settingsDao = AppSettingsDao();
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedMonths = widget.product.maxInstallmentMonths > 1 ? 1 : 1;
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final settings = await _settingsDao.getSettings();
+    if (!mounted) return;
+    setState(() {
+      _settings = settings;
+      _loadingSettings = false;
+    });
+  }
 
   Future<void> _submitOrder() async {
     final auth = context.read<AuthProvider>();
@@ -551,28 +573,42 @@ class _ElectricalProductDetailSheetState
     if (customer == null) return;
     setState(() => _saving = true);
     try {
-      await RequestDao().insert(ProductRequest(
+      final now = DateTime.now().toIso8601String();
+      final invoiceNo = await _invoiceDao.generateInvoiceNo();
+      final totalPrice = widget.product.effectiveCashPrice * _qty;
+      final invoiceId = await _invoiceDao.insertInvoice(CustomerInvoice(
         customerId: customer.id!,
-        productName: widget.product.name,
-        qty: _qty.toDouble(),
+        invoiceNo: invoiceNo,
+        total: totalPrice,
         paymentMethod: AppConstants.paymentMethodStore,
-        depositAmount: 0,
-        numInstallments: null,
-        date: DateTime.now().toIso8601String().substring(0, 10),
-        createdAt: DateTime.now().toIso8601String(),
-        storeType: AppConstants.storeElectrical,
+        status: 'pending',
+        notes: 'طلب منتج كهربائي: ${widget.product.name}',
+        date: now.substring(0, 10),
+        createdAt: now,
+        customerStoreType: AppConstants.storeElectrical,
+        items: [
+          CustomerInvoiceItem(
+            itemId: widget.product.id,
+            itemName: widget.product.name,
+            qty: _qty.toDouble(),
+            unitPrice: widget.product.effectiveCashPrice,
+            total: totalPrice,
+          ),
+        ],
       ));
       if (mounted) {
         await PushNotificationService.sendToRole(
           role: 'admin',
-          title: NotifMsg.newRequestAdminTitle,
-          body: NotifMsg.newRequestAdminBody,
-          type: 'request',
+          title: NotifMsg.newInvoiceAdminTitle,
+          body: '${NotifMsg.newInvoiceAdminBody} $invoiceNo',
+          type: 'invoice',
+          referenceId: invoiceId,
+          referenceType: 'invoice',
         );
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('تم إرسال طلبك بنجاح ✓'),
+          SnackBar(
+              content: Text('تم إرسال الطلب كفاتورة رقم $invoiceNo'),
               backgroundColor: Colors.green),
         );
       }
@@ -698,6 +734,31 @@ class _ElectricalProductDetailSheetState
                             color: Colors.orange,
                             fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
+                  if (product.effectiveCashPrice > 0) ...[
+                    const Text('معاينة التقسيط', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 8),
+                    if (_loadingSettings)
+                      const Center(child: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2)))
+                    else ...[
+                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                        Text('$_selectedMonths شهر', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text('${AppFormatters.formatCurrency(_settings.totalWithFee(product.effectiveCashPrice * _qty, _selectedMonths))}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(AppColors.installmentInt))),
+                      ]),
+                      Slider(
+                        min: 1,
+                        max: widget.product.maxInstallmentMonths.toDouble().clamp(1.0, 120.0),
+                        divisions: widget.product.maxInstallmentMonths > 1 ? widget.product.maxInstallmentMonths - 1 : 1,
+                        value: _selectedMonths.toDouble().clamp(1.0, widget.product.maxInstallmentMonths.toDouble()),
+                        label: '$_selectedMonths شهر',
+                        activeColor: const Color(AppColors.installmentInt),
+                        onChanged: (value) => setState(() => _selectedMonths = value.round()),
+                      ),
+                      Text('شهرياً: ${AppFormatters.formatCurrency(_settings.totalWithFee(product.effectiveCashPrice * _qty, _selectedMonths) / _selectedMonths)}', style: const TextStyle(color: Color(AppColors.installmentInt))),
+                      const SizedBox(height: 4),
+                      const Text('هذه قيمة تقديرية فقط، الطلب يُرسل كفاتورة مباشرة.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      const SizedBox(height: 12),
+                    ],
+                  ],
                   // Qty
                   Row(children: [
                     const Text('الكمية: ', style: TextStyle(fontWeight: FontWeight.w500)),

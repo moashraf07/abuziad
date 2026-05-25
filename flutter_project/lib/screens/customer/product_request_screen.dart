@@ -23,9 +23,10 @@ class ProductRequestScreen extends StatefulWidget {
   final InstallmentProduct? installmentProduct; // Feature 5: for installment products
   final String? productName;
   final String? storeType; // filter product picker to this store type
+  final int? initialInstallmentMonths;
 
   const ProductRequestScreen(
-      {super.key, this.item, this.installmentProduct, this.productName, this.storeType});
+      {super.key, this.item, this.installmentProduct, this.productName, this.storeType, this.initialInstallmentMonths});
 
   @override
   State<ProductRequestScreen> createState() => _ProductRequestScreenState();
@@ -43,11 +44,11 @@ class _ProductRequestScreenState extends State<ProductRequestScreen> {
   final _productNameCtrl = TextEditingController();
   final _manualPriceCtrl = TextEditingController();
 
-  // Feature 5: max months — always at least defaultMaxInstallmentMonths (24)
+  // Feature 5: max months — use the admin-configured product limit.
   int get _maxMonths {
     if (widget.installmentProduct != null) {
-      return widget.installmentProduct!.maxInstallmentMonths
-          .clamp(AppConstants.defaultMaxInstallmentMonths, 9999);
+      final max = widget.installmentProduct!.maxInstallmentMonths;
+      return max > 0 ? max : AppConstants.defaultMaxInstallmentMonths;
     }
     return AppConstants.defaultMaxInstallmentMonths;
   }
@@ -57,7 +58,7 @@ class _ProductRequestScreenState extends State<ProductRequestScreen> {
   @override
   void initState() {
     super.initState();
-    _installmentMonths = 12.clamp(1, _maxMonths);
+    _installmentMonths = (widget.initialInstallmentMonths ?? 12).clamp(1, _maxMonths);
     if (widget.productName != null) {
       _productNameCtrl.text = widget.productName!;
     }
@@ -107,16 +108,46 @@ class _ProductRequestScreenState extends State<ProductRequestScreen> {
       _unitPrice == 0.0 &&
       (double.tryParse(_manualPriceCtrl.text) ?? 0) == 0;
 
+  double get _requestBasePrice {
+    if (widget.installmentProduct != null) {
+      if (widget.installmentProduct!.installmentPrice > 0) {
+        return widget.installmentProduct!.installmentPrice;
+      }
+      return widget.installmentProduct!.salePrice;
+    }
+    if (widget.item != null) {
+      final auth = context.read<AuthProvider>();
+      final priceType = auth.currentCustomer?.priceType ?? AppConstants.priceRetail;
+      return widget.item!.priceForType(priceType);
+    }
+    return double.tryParse(_manualPriceCtrl.text) ?? 0.0;
+  }
+
+  double get _invoiceTotal => _installCalc != null
+      ? ((_installCalc!['total_price'] as num?)?.toDouble() ?? _unitPrice * _qty)
+      : _unitPrice * _qty;
+
   void _updateCalc() {
-    final salePrice = _unitPrice * _qty;
+    final salePrice = _requestBasePrice * _qty;
     double purchasePrice = 0;
     if (widget.item != null) {
       purchasePrice = widget.item!.purchasePrice * _qty;
     } else if (widget.installmentProduct != null) {
       purchasePrice = widget.installmentProduct!.purchasePrice * _qty;
     }
-    double rate = _settings.rateForMonths(_installmentMonths);
-    if (rate <= 0) rate = 10.0;
+
+    double rate = 0;
+    if (widget.installmentProduct != null &&
+        widget.installmentProduct!.installmentPrice > 0) {
+      rate = 0.0;
+    } else if (widget.installmentProduct != null &&
+        widget.installmentProduct!.profitRate > 0) {
+      rate = widget.installmentProduct!.profitRate * 100 * _installmentMonths;
+    } else {
+      rate = _settings.rateForMonths(_installmentMonths);
+      if (rate <= 0) rate = 10.0;
+    }
+
     final calc = InstallmentProvider.calculateInstallment(
       salePrice: salePrice,
       purchasePrice: purchasePrice,
@@ -259,28 +290,31 @@ class _ProductRequestScreenState extends State<ProductRequestScreen> {
       final now = DateTime.now().toIso8601String();
       final requestStoreType = widget.storeType ?? customer.storeType;
       String? notesText;
-      final insertedId = await RequestDao().insert(ProductRequest(
-        customerId: customer.id!,
-        itemId: widget.item?.id,
-        productName: productName,
-        qty: _qty,
-        paymentMethod: _paymentMethod,
-        receiptPath: _receiptPath,
-        depositAmount: _depositAmount,
-        numInstallments: _paymentMethod == AppConstants.paymentMethodStore
-            ? _installmentMonths
-            : null,
-        notes: notesText,
-        date: now.substring(0, 10),
-        createdAt: now,
-        storeType: requestStoreType,
-      ));
+      int? requestId;
+      if (requestStoreType != AppConstants.storeElectrical) {
+        requestId = await RequestDao().insert(ProductRequest(
+          customerId: customer.id!,
+          itemId: widget.item?.id,
+          productName: productName,
+          qty: _qty,
+          paymentMethod: _paymentMethod,
+          receiptPath: _receiptPath,
+          depositAmount: _depositAmount,
+          numInstallments: _paymentMethod == AppConstants.paymentMethodStore
+              ? _installmentMonths
+              : null,
+          notes: notesText,
+          date: now.substring(0, 10),
+          createdAt: now,
+          storeType: requestStoreType,
+        ));
+      }
 
       final invoiceNo = await _invoiceDao.generateInvoiceNo();
       final invoiceId = await _invoiceDao.insertInvoice(CustomerInvoice(
         customerId: customer.id!,
         invoiceNo: invoiceNo,
-        total: _unitPrice * _qty,
+        total: _invoiceTotal,
         paymentMethod: _paymentMethod,
         receiptPath: _receiptPath,
         status: 'pending',
@@ -293,8 +327,8 @@ class _ProductRequestScreenState extends State<ProductRequestScreen> {
             itemId: widget.item?.id ?? widget.installmentProduct?.id,
             itemName: productName,
             qty: _qty,
-            unitPrice: _unitPrice,
-            total: _unitPrice * _qty,
+            unitPrice: _qty > 0 ? _invoiceTotal / _qty : 0,
+            total: _invoiceTotal,
           ),
         ],
       ));
@@ -308,7 +342,8 @@ class _ProductRequestScreenState extends State<ProductRequestScreen> {
           referenceId: invoiceId,
           referenceType: 'invoice',
         );
-      } else {
+      }
+      if (requestId != null && requestId > 0) {
         final storeLabel = AppConstants.deptLabels[customer.storeType] ?? customer.storeType ?? '';
         PushNotificationService.sendToRole(
           role: 'admin',
@@ -316,7 +351,7 @@ class _ProductRequestScreenState extends State<ProductRequestScreen> {
           body: '${NotifMsg.newRequestAdminBody}: $productName'
               '${storeLabel.isNotEmpty ? " ($storeLabel)" : ""}',
           type: 'request',
-          referenceId: insertedId > 0 ? insertedId : null,
+          referenceId: requestId,
           referenceType: 'request',
         );
       }
@@ -458,6 +493,51 @@ class _ProductRequestScreenState extends State<ProductRequestScreen> {
                 onPressed: () { setState(() => _qty++); _updateCalc(); },
               ),
             ]),
+            if (widget.installmentProduct != null && _paymentMethod == AppConstants.paymentMethodStore) ...[
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('عدد أشهر التقسيط',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  Text('$_installmentMonths شهر',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  activeTrackColor: const Color(AppColors.installmentInt),
+                  thumbColor: const Color(AppColors.installmentInt),
+                  inactiveTrackColor:
+                      const Color(AppColors.installmentInt).withValues(alpha: 0.3),
+                ),
+                child: Slider(
+                  value: _installmentMonths.toDouble(),
+                  min: 1,
+                  max: _maxMonths.toDouble(),
+                  divisions: _maxMonths > 1 ? _maxMonths - 1 : 1,
+                  label: '$_installmentMonths',
+                  onChanged: (value) {
+                    setState(() {
+                      _installmentMonths = value.round().clamp(1, _maxMonths);
+                      _updateCalc();
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (_installCalc != null) ...[
+                _CalcRow('السعر الإجمالي بعد الرسوم',
+                    AppFormatters.formatCurrency(((_installCalc!['total_price'] as num?)?.toDouble() ?? 0)),
+                    bold: true),
+                _CalcRow('القسط الشهري',
+                    AppFormatters.formatCurrency(((_installCalc!['monthly_amount'] as num?)?.toDouble() ?? 0)),
+                    highlight: true),
+                _CalcRow('رسوم التقسيط',
+                    AppFormatters.formatCurrency(((_installCalc!['installment_fee'] as num?)?.toDouble() ?? 0))),
+              ],
+            ],
             const Divider(),
             // Payment method
             const Text('طريقة الدفع',

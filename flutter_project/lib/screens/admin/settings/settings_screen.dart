@@ -61,6 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       ),
     );
   }
+
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -267,6 +268,7 @@ class _UsersTabState extends State<_UsersTab> {
                     backgroundColor: Colors.green,
                   ),
                 );
+                print('Settings: updated loginCode for user ${user.id} -> $code');
               },
               child: const Text('حفظ الكود'),
             ),

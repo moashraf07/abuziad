@@ -157,8 +157,8 @@ class StoreApp extends StatelessWidget {
           '/customer-invoices': (_) => const CustomerInvoicesAdminScreen(),
           '/reports': (_) => const ReportsScreen(),
           '/treasury': (_) => const TreasuryScreen(),
-          '/requests': (_) => const RequestsScreen(),
-          '/clothing-requests': (_) => const RequestsScreen(storeType: 'clothing'),
+          '/requests': (_) => const RequestsScreen(storeType: AppConstants.storeInstallment),
+          '/clothing-requests': (_) => const RequestsScreen(storeType: AppConstants.storeClothing),
           '/discounts': (_) => const DiscountsScreen(),
           '/settings': (_) => const SettingsScreen(),
           '/users': (ctx) {

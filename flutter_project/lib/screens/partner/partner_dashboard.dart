@@ -197,13 +197,16 @@ class _PartnerDashboardState extends State<PartnerDashboard>
     final auth = context.watch<AuthProvider>();
     final name = auth.currentUser?.name ?? '';
     final initials = name.isNotEmpty ? name.trim()[0] : 'ش';
+    final groupCount = _myGroups.length;
+    final activeInstallments = _myInstallments.where((i) => (i['status'] as String? ?? 'active') == 'active').length;
+    final completedInstallments = _myInstallments.length - activeInstallments;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F8),
       body: NestedScrollView(
         headerSliverBuilder: (ctx, _) => [
           SliverAppBar(
-            expandedHeight: 160,
+            expandedHeight: 250,
             pinned: true,
             stretch: true,
             backgroundColor: const Color(0xFF4527A0),
@@ -234,36 +237,47 @@ class _PartnerDashboardState extends State<PartnerDashboard>
                 ),
                 child: SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                    child: Row(children: [
-                      CircleAvatar(
-                        radius: 30,
-                        backgroundColor: Colors.white.withValues(alpha: 0.2),
-                        child: Text(initials,
-                            style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                          const Text('مرحباً،', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                          Text(name.isNotEmpty ? name : 'شريك',
-                              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                              Icon(Icons.verified_user, color: Colors.amber, size: 13),
-                              SizedBox(width: 4),
-                              Text('شريك معتمد', style: TextStyle(color: Colors.white, fontSize: 11)),
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          CircleAvatar(
+                            radius: 30,
+                            backgroundColor: Colors.white.withValues(alpha: 0.2),
+                            child: Text(initials,
+                                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                              const Text('مرحباً،', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                              Text(name.isNotEmpty ? name : 'شريك',
+                                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                                  Icon(Icons.verified_user, color: Colors.amber, size: 13),
+                                  SizedBox(width: 4),
+                                  Text('شريك معتمد', style: TextStyle(color: Colors.white, fontSize: 11)),
+                                ]),
+                              ),
                             ]),
                           ),
                         ]),
-                      ),
-                    ]),
+                        const SizedBox(height: 18),
+                        Wrap(spacing: 10, runSpacing: 8, children: [
+                          SizedBox(width: 150, child: _HeaderBadge(label: 'مجموعاتك', value: '$groupCount', color: Colors.purple)),
+                          SizedBox(width: 150, child: _HeaderBadge(label: 'أقساط نشطة', value: '$activeInstallments', color: Colors.green)),
+                        ]),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1693,3 +1707,39 @@ class _StatCard extends StatelessWidget {
     );
   }
 }
+
+class _HeaderBadge extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _HeaderBadge({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.18)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color)),
+            const SizedBox(height: 2),
+            Text(label, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+

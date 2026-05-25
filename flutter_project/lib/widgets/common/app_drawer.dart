@@ -8,6 +8,7 @@ import '../../models/department.dart';
 import '../../screens/admin/installment_products/installment_products_screen.dart';
 import '../../screens/admin/installment_products/installment_categories_screen.dart';
 import '../../screens/admin/requests/requests_screen.dart';
+import '../../screens/admin/customer_invoices/customer_invoices_admin_screen.dart';
 import '../../screens/admin/installments/installments_screen.dart';
 
 const _hardcodedDrawerDepts = {
@@ -213,7 +214,7 @@ class _AppDrawerState extends State<AppDrawer> {
                           _navTile(context, 'فئات الكهربائية', Icons.category_rounded, '/electrical-categories'),
                           _navTile(context, 'الليستات الكهربائية', Icons.local_offer_rounded, '/electrical-bundles'),
                           if (_hasRequests(auth))
-                            _navTile(context, 'طلبات العملاء', Icons.inbox_rounded, '/requests'),
+                            _electricalInvoicesTile(context, 'فواتير العملاء', Icons.receipt_long),
                         ],
                       ),
 
@@ -503,6 +504,22 @@ class _AppDrawerState extends State<AppDrawer> {
           onTap: () { Navigator.pop(ctx); Navigator.push(ctx, MaterialPageRoute(
               builder: (_) => RequestsScreen(storeType: dept.storeType))); },
           child: _tilePadding(title, icon, _deptColor(dept.storeType)),
+        ),
+      );
+
+  Widget _electricalInvoicesTile(BuildContext ctx, String title, IconData icon) =>
+      Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            Navigator.pop(ctx);
+            Navigator.push(ctx, MaterialPageRoute(
+              builder: (_) => CustomerInvoicesAdminScreen(
+                storeType: AppConstants.storeElectrical,
+              ),
+            ));
+          },
+          child: _tilePadding(title, icon, const Color(AppColors.electricalInt)),
         ),
       );
 

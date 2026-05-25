@@ -62,7 +62,7 @@ class CustomerInvoiceDao {
     }
   }
 
-  Future<List<CustomerInvoice>> getAll({String? status}) async {
+  Future<List<CustomerInvoice>> getAll({String? status, String? storeType}) async {
     try {
       var q = _client
           .from('customer_invoices')
@@ -99,7 +99,11 @@ class CustomerInvoiceDao {
           customerStoreType: inv.customerStoreType,
         ));
       }
-      return invoices;
+
+      if (storeType == null) return invoices;
+      return invoices
+          .where((inv) => inv.customerStoreType?.trim() == storeType)
+          .toList();
     } catch (_) {
       return [];
     }
@@ -148,9 +152,10 @@ class CustomerInvoiceDao {
           .toList();
 
       if (storeType == null) return rows;
-      return rows
-          .where((row) => (row['customer_store_type'] as String?) == storeType)
-          .toList();
+      return rows.where((row) {
+        final customerStore = (row['customer_store_type'] as String?)?.trim();
+        return customerStore == storeType;
+      }).toList();
     } catch (_) {
       return [];
     }

@@ -47,6 +47,8 @@ class _SplashScreenState extends State<SplashScreen>
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Color(0xFF0A1338),
+      systemNavigationBarIconBrightness: Brightness.light,
     ));
 
     // ── Logo controller (1.4s) ────────────────────────────────────────────────
@@ -163,7 +165,19 @@ class _SplashScreenState extends State<SplashScreen>
     return Scaffold(
       body: Stack(
         children: [
-          // ── Gradient background ─────────────────────────────────────────────
+          // ── Image-backed hero background ───────────────────────────────────
+          Container(
+            decoration: BoxDecoration(
+              image: DecorationImage(
+                image: const AssetImage('assets/icon/splash.jpeg'),
+                fit: BoxFit.cover,
+                colorFilter: ColorFilter.mode(
+                  Colors.black.withOpacity(0.38),
+                  BlendMode.darken,
+                ),
+              ),
+            ),
+          ),
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -175,7 +189,7 @@ class _SplashScreenState extends State<SplashScreen>
                   Color(0xFF0A1338),
                   Color(0xFF060D24),
                 ],
-                stops: [0.0, 0.35, 0.65, 1.0],
+                stops: [0.0, 0.28, 0.6, 1.0],
               ),
             ),
           ),

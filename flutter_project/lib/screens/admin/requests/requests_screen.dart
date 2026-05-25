@@ -8,8 +8,8 @@ import '../../../services/push_notification_service.dart';
 import '../customer_invoices/customer_invoices_admin_screen.dart';
 
 class RequestsScreen extends StatefulWidget {
-  final String? storeType;
-  const RequestsScreen({super.key, this.storeType});
+  final String storeType;
+  const RequestsScreen({super.key, String? storeType}) : storeType = storeType ?? AppConstants.storeInstallment;
 
   @override
   State<RequestsScreen> createState() => _RequestsScreenState();

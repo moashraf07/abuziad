@@ -14,6 +14,7 @@ import '../../database/daos/customer_invoice_dao.dart';
 import '../../database/daos/department_dao.dart';
 import '../../database/daos/request_dao.dart';
 import '../../models/department.dart';
+import 'customer_invoices/customer_invoices_admin_screen.dart';
 import 'installments/installments_by_section_screen.dart';
 import 'installment_products/installment_products_screen.dart';
 import 'installment_products/installment_categories_screen.dart';
@@ -42,6 +43,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   /// Pending request counts keyed by storeType (or 'all' for total).
   Map<String, int> _pendingRequestsByDept = {};
   int _pendingInvoices = 0;
+  int _pendingElectricalInvoices = 0;
   bool _loaded = true;
   String? _loadError;
   List<Department> _allDepartments = [];
@@ -102,10 +104,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
       } catch (_) {}
 
       int pendingInvoices = 0;
+      int pendingElectricalInvoices = 0;
       try {
         final invoiceDao = CustomerInvoiceDao();
         final allInvoices = await invoiceDao.getAll();
         pendingInvoices = allInvoices.where((inv) => inv.status == 'pending').length;
+        final electricalInvoices = await invoiceDao.getAll(storeType: AppConstants.storeElectrical);
+        pendingElectricalInvoices = electricalInvoices.where((inv) => inv.status == 'pending').length;
       } catch (_) {}
 
       // Load pending customer requests — build a per-department count map
@@ -132,6 +137,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           _salesSummary = summary;
           _overdueCount = overdue.length;
           _pendingInvoices = pendingInvoices;
+          _pendingElectricalInvoices = pendingElectricalInvoices;
           _pendingRequestsByDept = pendingByDept;
           _allDepartments = departments;
           _loaded = true;
@@ -474,18 +480,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                   context, '/installments/electrical'),
                             ),
                             StatCard(
-                              title: 'طلبات عملاء الكهربائيات',
-                              value: _pendingReqsFor(AppConstants.storeElectrical) > 0
-                                  ? '${_pendingReqsFor(AppConstants.storeElectrical)} طلب'
+                              title: 'فواتير العملاء',
+                              value: _pendingElectricalInvoices > 0
+                                  ? '$_pendingElectricalInvoices انتظار'
                                   : 'عرض',
-                              icon: Icons.inbox_rounded,
-                              color: _pendingReqsFor(AppConstants.storeElectrical) > 0
-                                  ? Colors.red
-                                  : Colors.teal,
+                              icon: Icons.receipt_long,
+                              color: _pendingElectricalInvoices > 0 ? Colors.red : Colors.teal,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => RequestsScreen(
+                                  builder: (_) => CustomerInvoicesAdminScreen(
                                     storeType: AppConstants.storeElectrical,
                                   ),
                                 ),

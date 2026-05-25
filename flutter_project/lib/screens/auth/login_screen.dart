@@ -83,7 +83,8 @@ class _LoginScreenState extends State<LoginScreen>
     if (code.isEmpty) { _showError('ادخل كود الدخول'); return; }
     if (mounted) setState(() => _loading = true);
     try {
-      final error = await context.read<AuthProvider>().loginWithCode(code, 'manager').timeout(
+      print('LoginScreen: manager login attempt with code="$code"');
+      final error = await context.read<AuthProvider>().loginWithCode(code, AppConstants.roleManager).timeout(
             const Duration(seconds: 15),
             onTimeout: () => 'انتهت مهلة الاتصال. تحقق من الإنترنت وأعد المحاولة',
           );
@@ -104,6 +105,7 @@ class _LoginScreenState extends State<LoginScreen>
     if (code.isEmpty) { _showError('ادخل كود الدخول'); return; }
     if (mounted) setState(() => _loading = true);
     try {
+      print('LoginScreen: customer login attempt with code="$code"');
       final error = await context.read<AuthProvider>().loginCustomer(code).timeout(
             const Duration(seconds: 15),
             onTimeout: () => 'انتهت مهلة الاتصال. تحقق من الإنترنت وأعد المحاولة',
@@ -130,7 +132,8 @@ class _LoginScreenState extends State<LoginScreen>
     if (code.isEmpty) { _showError('ادخل كود الدخول'); return; }
     if (mounted) setState(() => _loading = true);
     try {
-      final error = await context.read<AuthProvider>().loginWithCode(code, 'partner').timeout(
+      print('LoginScreen: partner login attempt with code="$code"');
+      final error = await context.read<AuthProvider>().loginWithCode(code, AppConstants.rolePartner).timeout(
             const Duration(seconds: 15),
             onTimeout: () => 'انتهت مهلة الاتصال. تحقق من الإنترنت وأعد المحاولة',
           );

@@ -146,34 +146,54 @@ class AuthProvider extends ChangeNotifier {
 
   Future<String?> loginWithCode(String code, String expectedRole) async {
     try {
+      print('AuthProvider.loginWithCode called with code="$code" expectedRole="$expectedRole"');
       final dao = UserDao();
-      final user = await dao.findByLoginCode(code.trim());
-      if (user != null) {
-        if (!user.isActive) {
-          return 'الحساب موقوف، تواصل مع المدير';
+      final users = await dao.findAllByLoginCode(code.trim());
+      print('AuthProvider.loginWithCode: dao returned ${users.length} user(s)');
+      if (users.isEmpty) {
+        return 'كود الدخول غير صحيح';
+      }
+
+      final expectedRoleNormalized = expectedRole.trim().toLowerCase();
+      User? user;
+      if (expectedRoleNormalized.isNotEmpty) {
+        User? adminUser;
+        for (final candidate in users) {
+          final candidateRole = candidate.role.trim().toLowerCase();
+          if (candidateRole == expectedRoleNormalized) {
+            user = candidate;
+            break;
+          }
+          if (candidateRole == AppConstants.roleAdmin) {
+            adminUser = candidate;
+          }
         }
-        // Feature 3: check code expiry
-        if (user.isCodeExpired) {
-          return 'انتهت صلاحية كود الدخول (مؤقت). تواصل مع المدير للحصول على كود جديد';
-        }
-        if (expectedRole.isNotEmpty &&
-            user.role != expectedRole &&
-            user.role != 'admin') {
+        user ??= adminUser;
+        if (user == null) {
           return 'كود الدخول غير صحيح لهذا النوع من الحسابات';
         }
-        _currentUser = user;
-        _currentCustomer = null;
-        _viewingAsCustomer = false;
-        _adminUser = null;
-        _state = _roleToState(user.role);
-        _pendingQuickAccess = false;
-        await _saveSession('user', user.id!);
-        notifyListeners();
-        // Register FCM token for this user
-        PushNotificationService().registerToken(userId: user.id);
-        return null;
+      } else {
+        user = users.first;
       }
-      return 'كود الدخول غير صحيح';
+
+      if (!user.isActive) {
+        return 'الحساب موقوف، تواصل مع المدير';
+      }
+      // Feature 3: check code expiry
+      if (user.isCodeExpired) {
+        return 'انتهت صلاحية كود الدخول (مؤقت). تواصل مع المدير للحصول على كود جديد';
+      }
+      _currentUser = user;
+      _currentCustomer = null;
+      _viewingAsCustomer = false;
+      _adminUser = null;
+      _state = _roleToState(user.role);
+      _pendingQuickAccess = false;
+      await _saveSession('user', user.id!);
+      notifyListeners();
+      // Register FCM token for this user
+      PushNotificationService().registerToken(userId: user.id);
+      return null;
     } catch (e) {
       return 'خطأ في الاتصال بالسيرفر. تحقق من الإنترنت وأعد المحاولة';
     }
@@ -181,8 +201,10 @@ class AuthProvider extends ChangeNotifier {
 
   Future<String?> loginCustomer(String code) async {
     try {
+      print('AuthProvider.loginCustomer called with code="$code"');
       final dao = CustomerDao();
       final customer = await dao.findByLoginCode(code.trim());
+      print('AuthProvider.loginCustomer: dao returned ${customer != null ? '1' : '0'}');
       if (customer == null) {
         return 'كود الدخول غير صحيح';
       }

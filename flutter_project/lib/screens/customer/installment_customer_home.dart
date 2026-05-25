@@ -7,6 +7,7 @@ import '../../providers/installment_provider.dart';
 import '../../database/daos/installment_product_dao.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../models/app_settings.dart';
 import '../../models/customer.dart';
 import '../../models/installment_product.dart';
 import '../../utils/constants.dart';
@@ -455,11 +456,49 @@ class _ProductDetailSheet extends StatefulWidget {
 
 class _ProductDetailSheetState extends State<_ProductDetailSheet> {
   int _imgIndex = 0;
+  int _selectedMonths = 1;
+  AppSettings _settings = const AppSettings();
 
   List<String> get _allImages {
     final imgs = List<String>.from(widget.product.imagePaths);
     if (imgs.isEmpty && widget.product.imagePath != null) imgs.add(widget.product.imagePath!);
     return imgs;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadInstallmentSettings();
+  }
+
+  Future<void> _loadInstallmentSettings() async {
+    try {
+      final provider = context.read<InstallmentProvider>();
+      if (provider.settings.monthlyInstallmentRate == 0) {
+        await provider.loadSettings();
+      }
+      if (mounted) {
+        setState(() => _settings = provider.settings);
+      }
+    } catch (_) {}
+  }
+
+  double get _detailRate {
+    if (widget.product.profitRate > 0) {
+      return widget.product.profitRate * 100 * _selectedMonths;
+    }
+    return _settings.rateForMonths(_selectedMonths);
+  }
+
+  double get _detailTotalPrice {
+    if (widget.product.installmentPrice > 0) {
+      return widget.product.installmentPrice;
+    }
+    return widget.product.salePrice * (1.0 + (_detailRate / 100.0));
+  }
+
+  double get _detailMonthlyPayment {
+    return _selectedMonths > 0 ? _detailTotalPrice / _selectedMonths : 0;
   }
 
   @override
@@ -525,6 +564,37 @@ class _ProductDetailSheetState extends State<_ProductDetailSheet> {
                 _PriceRow('سعر الكاش', AppFormatters.formatCurrency(widget.product.effectiveCashPrice), Colors.green, Icons.payments),
               if (widget.product.showInstallmentPrice)
                 _PriceRow('سعر التقسيط الإجمالي', AppFormatters.formatCurrency(widget.product.effectiveInstallmentPrice), Colors.blue, Icons.payment),
+              if (widget.product.showInstallmentPrice && widget.product.maxInstallmentMonths > 1) ...[
+                const SizedBox(height: 8),
+                Text('حد أقصى عدد أشهر التقسيط: ${widget.product.maxInstallmentMonths} شهر',
+                    style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                const SizedBox(height: 12),
+                Text('اختر عدد الأشهر', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
+                const SizedBox(height: 8),
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: const Color(AppColors.installmentInt),
+                    thumbColor: const Color(AppColors.installmentInt),
+                    inactiveTrackColor: const Color(AppColors.installmentInt).withValues(alpha: 0.3),
+                  ),
+                  child: Slider(
+                    value: _selectedMonths.toDouble(),
+                    min: 1,
+                    max: widget.product.maxInstallmentMonths.toDouble(),
+                    divisions: widget.product.maxInstallmentMonths > 1
+                        ? widget.product.maxInstallmentMonths - 1
+                        : 1,
+                    label: '$_selectedMonths',
+                    onChanged: (value) {
+                      setState(() => _selectedMonths = value.round().clamp(1, widget.product.maxInstallmentMonths));
+                    },
+                  ),
+                ),
+                _PriceRow('القسط الشهري',
+                    AppFormatters.formatCurrency(_detailMonthlyPayment),
+                    Colors.blue,
+                    Icons.schedule),
+              ],
               if (!widget.product.showCashPrice && !widget.product.showInstallmentPrice)
                 const Text('السعر بالتواصل مع الإدارة', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
               if (widget.product.companyPercentage > 0) ...[
@@ -547,7 +617,12 @@ class _ProductDetailSheetState extends State<_ProductDetailSheet> {
                   onPressed: () {
                     Navigator.pop(context);
                     Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => ProductRequestScreen(installmentProduct: widget.product, storeType: AppConstants.storeInstallment),
+                      builder: (_) => ProductRequestScreen(
+                        installmentProduct: widget.product,
+                        storeType: AppConstants.storeInstallment,
+                        // Pass the customer-selected months from the detail sheet.
+                        initialInstallmentMonths: _selectedMonths,
+                      ),
                     ));
                   },
                   icon: const Icon(Icons.add_shopping_cart),

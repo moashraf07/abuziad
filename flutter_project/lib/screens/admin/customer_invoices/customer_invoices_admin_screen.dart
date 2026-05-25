@@ -13,7 +13,8 @@ import 'package:printing/printing.dart';
 import '../../../utils/notification_messages.dart';
 
 class CustomerInvoicesAdminScreen extends StatefulWidget {
-  const CustomerInvoicesAdminScreen({super.key});
+  final String? storeType;
+  const CustomerInvoicesAdminScreen({super.key, this.storeType});
   @override
   State<CustomerInvoicesAdminScreen> createState() => _CustomerInvoicesAdminScreenState();
 }
@@ -40,11 +41,10 @@ class _CustomerInvoicesAdminScreenState extends State<CustomerInvoicesAdminScree
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-
-    final all = await _dao.getAll();
-    final map = <String, List<CustomerInvoice>>{
-      'pending': [], 'approved': [], 'rejected': [], 'delivered': []
-    };
+      final all = await _dao.getAll(storeType: widget.storeType);
+      final map = <String, List<CustomerInvoice>>{
+        'pending': [], 'approved': [], 'rejected': [], 'delivered': []
+      };
     for (final inv in all) {
       (map[inv.status] ?? map['pending']!).add(inv);
     }
@@ -220,16 +220,7 @@ class _InvoiceList extends StatelessWidget {
                                 backgroundColor: Colors.green, foregroundColor: Colors.white),
                             onPressed: () async {
                               await dao.updateStatus(inv.id!, 'approved');
-                              // WhatsApp notification if phone available
-                              if (inv.customerPhone != null) {
-                                WhatsAppHelper.sendInvoiceNotification(
-                                  phone: inv.customerPhone!,
-                                  customerName: inv.customerName ?? '',
-                                  invoiceNo: inv.invoiceNo,
-                                  total: inv.total,
-                                );
-                              }
-                              // Push notification to customer
+                              // Push notification to customer only
                               PushNotificationService.sendToCustomer(
                                 customerId: inv.customerId,
                                 title: NotifMsg.invoiceApprovedTitle,
@@ -238,10 +229,6 @@ class _InvoiceList extends StatelessWidget {
                                 referenceId: inv.id,
                                 referenceType: 'invoice',
                               );
-                              // Offer to create installment plan
-                              if (context.mounted) {
-                                await _showInstallmentDialog(context, inv, dao);
-                              }
                               onRefresh();
                             },
                             icon: const Icon(Icons.check_circle, size: 16),
