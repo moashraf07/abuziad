@@ -1293,7 +1293,7 @@ class _PricingSheetScreenState extends State<_PricingSheetScreen> {
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
                 child: TextField(
                   decoration: InputDecoration(
-                    hintText: 'بحث في الكشف...',
+                    hintText: 'بحث في المنتجات...',
                     prefixIcon: const Icon(Icons.search, color: Colors.teal),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     isDense: true,

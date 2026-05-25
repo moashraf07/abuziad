@@ -24,14 +24,14 @@ class _CustomerInvoicesAdminScreenState extends State<CustomerInvoicesAdminScree
   late final TabController _tabCtrl;
   final _dao = CustomerInvoiceDao();
   Map<String, List<CustomerInvoice>> _byStatus = {
-    'pending': [], 'approved': [], 'rejected': [], 'delivered': []
+    'pending': [], 'approved': [], 'rejected': []
   };
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 4, vsync: this);
+    _tabCtrl = TabController(length: 3, vsync: this);
     _load();
   }
 
@@ -61,8 +61,18 @@ class _CustomerInvoicesAdminScreenState extends State<CustomerInvoicesAdminScree
     return Scaffold(
       appBar: AppBar(
         title: const Text('طلبات العملاء'),
-        backgroundColor: const Color(AppColors.primaryInt),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         foregroundColor: Colors.white,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(AppColors.primaryInt), Color(0xFF1A237E)],
+            ),
+          ),
+        ),
         bottom: TabBar(
           controller: _tabCtrl,
           labelColor: Colors.white,
@@ -80,7 +90,6 @@ class _CustomerInvoicesAdminScreenState extends State<CustomerInvoicesAdminScree
             ])),
             const Tab(text: 'مقبول'),
             const Tab(text: 'مرفوض'),
-            const Tab(text: 'مُسلَّم'),
           ],
         ),
       ),
@@ -94,8 +103,6 @@ class _CustomerInvoicesAdminScreenState extends State<CustomerInvoicesAdminScree
                 _InvoiceList(invoices: _byStatus['approved'] ?? [], dao: _dao, onRefresh: _load,
                     showActions: true),
                 _InvoiceList(invoices: _byStatus['rejected'] ?? [], dao: _dao, onRefresh: _load,
-                    showActions: false),
-                _InvoiceList(invoices: _byStatus['delivered'] ?? [], dao: _dao, onRefresh: _load,
                     showActions: false),
               ],
             ),
@@ -131,7 +138,10 @@ class _InvoiceList extends StatelessWidget {
         itemBuilder: (ctx, i) {
           final inv = invoices[i];
           return Card(
-            margin: const EdgeInsets.only(bottom: 10),
+            margin: const EdgeInsets.only(bottom: 12),
+            elevation: 4,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            clipBehavior: Clip.antiAlias,
             child: ExpansionTile(
               leading: CircleAvatar(
                 backgroundColor: _statusColor(inv.status).withValues(alpha: 0.12),

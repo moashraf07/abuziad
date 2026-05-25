@@ -412,9 +412,9 @@ class _RequestCard extends StatelessWidget {
     final installments = data['num_installments'] as int?;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      margin: const EdgeInsets.only(bottom: 14),
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -424,7 +424,13 @@ class _RequestCard extends StatelessWidget {
             // ── Coloured header bar ───────────────────────────────────────
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              color: themeColor,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [themeColor.withValues(alpha: 0.95), themeColor.withValues(alpha: 0.75)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
               child: Row(
                 children: [
                   const Icon(Icons.inventory_2_outlined,

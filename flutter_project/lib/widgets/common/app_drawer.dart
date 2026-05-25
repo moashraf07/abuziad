@@ -424,34 +424,39 @@ class _AppDrawerState extends State<AppDrawer> {
         onTap: () { Navigator.pop(context); Navigator.pushNamed(context, route); },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
-            color: isActive ? color.withValues(alpha: 0.18) : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            border: isActive ? Border.all(color: color.withValues(alpha: 0.4), width: 1) : null,
+            color: isActive ? color.withValues(alpha: 0.12) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Row(children: [
+            // Active left indicator
             Container(
-              padding: const EdgeInsets.all(5),
+              width: 4,
+              height: 36,
+              margin: const EdgeInsets.only(right: 8),
               decoration: BoxDecoration(
-                  color: isActive ? color.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(6)),
-              child: Icon(icon, color: isActive ? color : const Color(0xFF6B7A8D), size: 16),
+                color: isActive ? color : Colors.transparent,
+                borderRadius: BorderRadius.circular(4),
+              ),
             ),
-            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                  color: isActive ? color.withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(8)),
+              child: Icon(icon, color: isActive ? color : const Color(0xFF90A4AE), size: 18),
+            ),
+            const SizedBox(width: 12),
             Expanded(
               child: Text(title,
                   style: TextStyle(
                     color: isActive ? color : const Color(0xFFB0BEC5),
-                    fontSize: 13,
-                    fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                    fontSize: 14,
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                   )),
             ),
-            if (isActive)
-              Container(
-                  width: 4, height: 4,
-                  decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
           ]),
         ),
       ),

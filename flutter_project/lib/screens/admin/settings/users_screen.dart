@@ -20,6 +20,8 @@ import '../../../services/login_code_service.dart';
 import '../../customer/electrical_customer_home.dart';
 import '../../customer/installment_customer_home.dart';
 import '../../../services/push_notification_service.dart';
+import '../../../widgets/common/section_header.dart';
+import '../../../widgets/common/large_stat_card.dart';
 
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key, this.initialRole});
@@ -51,8 +53,18 @@ class _UsersScreenState extends State<UsersScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('إدارة المستخدمين'),
-        backgroundColor: const Color(AppColors.primaryInt),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         foregroundColor: Colors.white,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(AppColors.primaryInt), Color(0xFF1A237E)],
+            ),
+          ),
+        ),
         bottom: TabBar(
           controller: _tabCtrl,
           labelColor: Colors.white,
@@ -108,18 +120,24 @@ class _StaffTabState extends State<_StaffTab> {
   @override
   Widget build(BuildContext context) {
     return Column(children: [
+      const SizedBox(height: 12),
       Padding(
-        padding: const EdgeInsets.all(12),
-        child: SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(AppColors.primaryInt),
-                foregroundColor: Colors.white),
-            onPressed: () => _showAddUserDialog(widget.initialRole),
-            icon: const Icon(Icons.person_add),
-            label: const Text('إضافة مدير / شريك'),
-          ),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: SectionHeader(
+          title: 'إدارة المستخدمين',
+          subtitle: 'أضف، عدّل أو احذف المستخدمين والعملاء',
+          icon: Icons.manage_accounts,
+          color: const Color(AppColors.primaryInt),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        child: LargeStatCard(
+          title: 'أضف مدير أو شريك',
+          value: 'انقر للإضافة',
+          icon: Icons.person_add,
+          color: const Color(AppColors.primaryInt),
+          onTap: () => _showAddUserDialog(widget.initialRole),
         ),
       ),
       Expanded(
@@ -132,136 +150,46 @@ class _StaffTabState extends State<_StaffTab> {
                     itemBuilder: (ctx, i) {
                       final u = _users[i];
                       return Card(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
+                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        elevation: 4,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        clipBehavior: Clip.antiAlias,
                         child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           leading: CircleAvatar(
-                            backgroundColor:
-                                _roleColor(u.role).withValues(alpha: 0.12),
-                            child: Icon(_roleIcon(u.role),
-                                color: _roleColor(u.role)),
+                            radius: 24,
+                            backgroundColor: _roleColor(u.role).withValues(alpha: 0.12),
+                            child: Icon(_roleIcon(u.role), color: _roleColor(u.role), size: 22),
                           ),
-                          title: Text(u.name,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold)),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('اسم المستخدم: ${u.username}'),
-                              if (u.loginCode != null)
-                                Row(children: [
-                                  const Icon(Icons.vpn_key,
-                                      size: 12, color: Colors.blue),
-                                  const SizedBox(width: 4),
-                                  Text('كود: ${u.loginCode}',
-                                      style: const TextStyle(
-                                          color: Colors.blue,
-                                          fontWeight: FontWeight.bold)),
-                                  const SizedBox(width: 6),
-                                  // Feature 3: show code type badge
-                                  if (u.codeType ==
-                                      AppConstants.codeTypeTemporary)
-                                    _CodeTypeBadge(
-                                        isTemporary: true,
-                                        isExpired: u.isCodeExpired)
-                                  else
-                                    _CodeTypeBadge(isTemporary: false),
-                                ]),
-                              Row(children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: _roleColor(u.role).withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(_roleLabel(u.role),
-                                      style: TextStyle(
-                                          color: _roleColor(u.role),
-                                          fontSize: 11)),
-                                ),
-                                if (u.departmentType != null &&
-                                    u.departmentType !=
-                                        AppConstants.deptAll) ...[
-                                  const SizedBox(width: 4),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          Colors.purple.withValues(alpha: 0.1),
-                                      borderRadius:
-                                          BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                        AppConstants.deptLabels[
-                                                u.departmentType] ??
-                                            u.departmentType!,
-                                        style: const TextStyle(
-                                            color: Colors.purple,
-                                            fontSize: 11)),
-                                  ),
-                                ],
-                                if (!u.isActive) ...[
-                                  const SizedBox(width: 6),
-                                  const Icon(Icons.block,
-                                      color: Colors.red, size: 14),
-                                  const Text('موقوف',
-                                      style: TextStyle(
-                                          color: Colors.red, fontSize: 11)),
-                                ],
-                              ]),
-                            ],
-                          ),
+                          title: Text(u.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            const SizedBox(height: 4),
+                            Text(u.username, style: TextStyle(color: Colors.grey.shade700)),
+                            const SizedBox(height: 6),
+                            Row(children: [
+                              Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: _roleColor(u.role).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)), child: Text(_roleLabel(u.role), style: TextStyle(color: _roleColor(u.role), fontSize: 11, fontWeight: FontWeight.w600))),
+                              const SizedBox(width: 6),
+                              if (u.departmentType != null && u.departmentType != AppConstants.deptAll) Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.purple.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)), child: Text(AppConstants.deptLabels[u.departmentType] ?? u.departmentType!, style: const TextStyle(color: Colors.purple, fontSize: 11))),
+                              if (!u.isActive) ...[
+                                const SizedBox(width: 8),
+                                const Icon(Icons.block, color: Colors.red, size: 14),
+                                const SizedBox(width: 4),
+                                const Text('موقوف', style: TextStyle(color: Colors.red, fontSize: 11)),
+                              ],
+                            ])
+                          ]),
                           isThreeLine: true,
                           trailing: PopupMenuButton(
                             itemBuilder: (ctx) {
-                              final isAdmin =
-                                  ctx.read<AuthProvider>().isAdmin;
+                              final isAdmin = ctx.read<AuthProvider>().isAdmin;
                               return [
-                                const PopupMenuItem(
-                                    value: 'editcreds',
-                                    child: Row(children: [
-                                      Icon(Icons.edit, size: 18),
-                                      SizedBox(width: 8),
-                                      Text('تعديل البيانات')
-                                    ])),
-                                const PopupMenuItem(
-                                    value: 'gencode',
-                                    child: Row(children: [
-                                      Icon(Icons.qr_code, size: 18),
-                                      SizedBox(width: 8),
-                                      Text('توليد كود دخول')
-                                    ])),
-                                if (isAdmin)
-                                  PopupMenuItem(
-                                      value: 'toggle',
-                                      child: Row(children: [
-                                        Icon(
-                                            u.isActive
-                                                ? Icons.block
-                                                : Icons.check_circle,
-                                            size: 18),
-                                        const SizedBox(width: 8),
-                                        Text(u.isActive
-                                            ? 'إيقاف الحساب'
-                                            : 'تفعيل الحساب')
-                                      ])),
-                                if (isAdmin)
-                                  const PopupMenuItem(
-                                      value: 'delete',
-                                      child: Row(children: [
-                                        Icon(Icons.delete_outline,
-                                            size: 18, color: Colors.red),
-                                        SizedBox(width: 8),
-                                        Text('حذف',
-                                            style: TextStyle(
-                                                color: Colors.red))
-                                      ])),
+                                const PopupMenuItem(value: 'editcreds', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('تعديل البيانات')])),
+                                const PopupMenuItem(value: 'gencode', child: Row(children: [Icon(Icons.qr_code, size: 18), SizedBox(width: 8), Text('توليد كود دخول')])),
+                                if (isAdmin) PopupMenuItem(value: 'toggle', child: Row(children: [Icon(u.isActive ? Icons.block : Icons.check_circle, size: 18), const SizedBox(width: 8), Text(u.isActive ? 'إيقاف الحساب' : 'تفعيل الحساب')])),
+                                if (isAdmin) const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline, size: 18, color: Colors.red), SizedBox(width: 8), Text('حذف', style: TextStyle(color: Colors.red))])),
                               ];
                             },
-                            onSelected: (v) =>
-                                _handleAction(v as String, u),
+                            onSelected: (v) => _handleAction(v as String, u),
                           ),
                         ),
                       );
@@ -1155,7 +1083,7 @@ class _CustomersTabState extends State<_CustomersTab> {
   void _showCustomerDetail(Customer c) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: Text(c.name),
         content: Column(mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1181,7 +1109,7 @@ class _CustomersTabState extends State<_CustomersTab> {
         ]),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogCtx),
               child: const Text('إغلاق')),
         ],
       ),

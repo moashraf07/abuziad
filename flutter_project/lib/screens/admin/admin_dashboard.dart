@@ -180,8 +180,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('لوحة التحكم'),
-        backgroundColor: const Color(AppColors.primaryInt),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         foregroundColor: Colors.white,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(AppColors.primaryInt), Color(0xFF1A237E)],
+            ),
+          ),
+        ),
         actions: [
           // Realtime notification badge
           Stack(
@@ -259,6 +269,107 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       userName: auth.currentUserName,
                       deptLabel: _buildDeptLabel(auth),
                     ),
+                    const SizedBox(height: 8),
+                    _SystemHeader(
+                      title: 'لمحة سريعة',
+                      subtitle: 'مؤشرات الأداء الرئيسية على لوحة التحكم',
+                      icon: Icons.insights,
+                      color: Colors.teal,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: GridView.count(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: 1.45,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        children: [
+                          StatCard(
+                            title: 'الطلبات المعلقة',
+                            value: (_pendingRequestsByDept['all'] ?? 0) > 0
+                                ? '${_pendingRequestsByDept['all']} طلب'
+                                : 'لا توجد',
+                            icon: Icons.inbox,
+                            color: Colors.teal,
+                            subtitle: 'جميع الأقسام',
+                            highlight: (_pendingRequestsByDept['all'] ?? 0) > 0,
+                            onTap: () => Navigator.pushNamed(context, '/requests'),
+                          ),
+                          StatCard(
+                            title: 'فواتير كهرباء',
+                            value: _pendingElectricalInvoices > 0
+                                ? '$_pendingElectricalInvoices انتظار'
+                                : 'عرض',
+                            icon: Icons.flash_on,
+                            color: Colors.blueGrey,
+                            subtitle: 'منتجات الكهربائيات',
+                            highlight: _pendingElectricalInvoices > 0,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CustomerInvoicesAdminScreen(
+                                  storeType: AppConstants.storeElectrical,
+                                ),
+                              ),
+                            ),
+                          ),
+                          StatCard(
+                            title: 'أقساط متأخرة',
+                            value: _overdueCount > 0
+                                ? '$_overdueCount متأخرة'
+                                : 'ممتاز',
+                            icon: Icons.warning_amber,
+                            color: _overdueCount > 0 ? Colors.red : Colors.green,
+                            subtitle: 'أولوية للسداد',
+                            highlight: _overdueCount > 0,
+                            onTap: () => Navigator.pushNamed(context, '/installments'),
+                          ),
+                          StatCard(
+                            title: 'العملاء النشطون',
+                            value: cust.customers.length.toString(),
+                            icon: Icons.people,
+                            color: Colors.indigo,
+                            subtitle: 'قاعدة العملاء',
+                            onTap: () => Navigator.pushNamed(context, '/customers'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (auth.isAdmin || auth.isManager) _QuickNavRow(items: [
+                      _QuickNavItem(
+                        icon: Icons.inbox,
+                        label: 'عرض الطلبات',
+                        route: '/requests',
+                        color: Colors.teal,
+                      ),
+                      _QuickNavItem(
+                        icon: Icons.description,
+                        label: 'الفواتير',
+                        route: '/customer-invoices',
+                        color: Colors.blue,
+                      ),
+                      _QuickNavItem(
+                        icon: Icons.receipt_long,
+                        label: 'الأقساط',
+                        route: '/installments',
+                        color: Colors.orange,
+                      ),
+                      _QuickNavItem(
+                        icon: Icons.notifications,
+                        label: 'الإشعارات',
+                        route: '/notifications',
+                        color: Colors.purple,
+                      ),
+                      _QuickNavItem(
+                        icon: Icons.manage_accounts,
+                        label: 'المستخدمون',
+                        route: '/users',
+                        color: Colors.indigo,
+                      ),
+                    ]),
 
                     // ══ System 1: Store ERP — admin & all-dept managers only ══
                     if (auth.isAdmin || (auth.isManager && auth.canAccessDept(AppConstants.deptAll) && auth.departmentType == AppConstants.deptAll)) ...[
